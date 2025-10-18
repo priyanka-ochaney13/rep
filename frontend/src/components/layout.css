@@ -1,0 +1,80 @@
+/* Shared layout styles for header & footer */
+.rx-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  box-sizing: border-box;
+}
+
+.rx-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(10px);
+  background: linear-gradient(90deg,#0e1320AA,#101b33AA);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.rx-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+}
+
+.rx-logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(90deg,#14b8ff,#3b82f6,#6366f1);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.rx-nav { display:flex; align-items:center; gap: 1.1rem; }
+.rx-nav a {
+  margin-left: 0;
+  font-size: 0.95rem;
+  color: #d0d7e2;
+  text-decoration: none;
+  position: relative;
+}
+.rx-nav a:after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: -4px;
+  width: 0; height: 2px;
+  background: linear-gradient(90deg,#14b8ff,#3b82f6,#6366f1);
+  transition: width .25s ease;
+  border-radius: 2px;
+}
+.rx-nav a:hover:after, .rx-nav a:focus:after { width: 100%; }
+.rx-nav a:hover { color: #fff; }
+
+/* ensure auth pill stays to the right with consistent spacing */
+.rx-nav .user-pill { margin-left: .4rem; }
+
+.rx-footer {
+  background: #0e1320;
+  padding: 2.5rem 0 3rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin-top: 3rem;
+}
+.rx-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+.rx-footer a { color: #9ca3af; text-decoration: none; margin-left: 1rem; }
+.rx-footer a:hover { color: #ffffff; }
+
+@media (max-width: 640px) {
+  .rx-nav { display: none; }
+  .rx-footer-inner { flex-direction: column; align-items: flex-start; }
+  .rx-footer a { margin-left: 0; margin-right: 1rem; }
+}

@@ -1,0 +1,74 @@
+# --- General ---
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+ehthumbs.db
+Icon?
+
+# Temp and swap files
+*~
+*.swp
+*.bak
+~$*
+
+# Logs
+*.log
+
+# --- Editors/IDEs ---
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+env.bak/
+pip-wheel-metadata/
+htmlcov/
+.pytest_cache/
+.coverage
+coverage.xml
+.mypy_cache/
+.dmypy.json
+.pyre/
+.env
+.env.*
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+
+# --- Packages / builds / artifacts ---
+*.egg-info/
+*.egg
+*.whl
+*.zip
+*.tar.gz
+
+# --- Secrets / keys ---
+*.key
+*.pem
+*.p12
+.env
+
+# --- OneDrive noise (since workspace is in OneDrive) ---
+~$*
+desktop.ini
+Thumbs.db
+
+# Cloned repos
+.ClonedRepos
+__pycache__/
+tp.py
+*.pyc

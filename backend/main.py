@@ -1,0 +1,499 @@
+import base64
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app.graph.graph import run_pipeline
+from app.models.state import DocGenState, DocGenPreferences
+from app.utils.cognito_auth import verify_cognito_token, extract_bearer_token, get_user_info_from_token
+from fastapi.responses import StreamingResponse
+import io
+import zipfile
+import json
+from typing import Dict, Any, Optional
+from datetime import datetime, timezone
+import boto3
+from botocore.exceptions import ClientError
+
+app = FastAPI(
+    title="RepoX Backend API",
+    description="Backend API for RepoX with AWS Cognito authentication",
+    version="1.0.0"
+)
+
+# Configure CORS to allow requests from React frontend running locally
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # React dev server
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+# Security scheme for Bearer token authentication
+security = HTTPBearer()
+
+# AWS Cognito client for user management operations
+import os
+
+cognito_client = boto3.client('cognito-idp', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+USER_POOL_ID = os.getenv('COGNITO_USER_POOL_ID', 'us-east-1_YOUR_USERPOOL_ID')
+APP_CLIENT_ID = os.getenv('COGNITO_APP_CLIENT_ID', 'YOUR_APP_CLIENT_ID')
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
+    """
+    Dependency to get current authenticated user from JWT token.
+    
+    Args:
+        credentials: HTTP Bearer credentials from Authorization header
+        
+    Returns:
+        Dict containing user information from verified token
+        
+    Raises:
+        HTTPException: If token is invalid or verification fails
+    """
+    # Extract the Bearer token
+    token = extract_bearer_token(credentials.credentials)
+    
+    # Verify the token with Cognito
+    claims = verify_cognito_token(token)
+    
+    # Extract user information
+    user_info = get_user_info_from_token(claims)
+    
+    return user_info
+
+
+@app.get("/")
+def read_root():
+    """Health check endpoint - no authentication required."""
+    return {"message": "Hello from FastAPI on Render!"}
+
+
+@app.get("/protected")
+def protected_route(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Protected route that requires valid AWS Cognito JWT access token.
+    
+    This endpoint:
+    1. Extracts the Bearer token from the Authorization header
+    2. Verifies the token with AWS Cognito
+    3. Returns user claims if valid, or 401 if invalid
+    
+    Args:
+        current_user: Authenticated user information from JWT token
+        
+    Returns:
+        Dict containing user information and token claims
+    """
+    return {
+        "message": "Access granted to protected resource",
+        "user": current_user,
+        "timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    }
+
+
+@app.get("/user/profile")
+def get_user_profile(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Get current user profile information from JWT token.
+    
+    Args:
+        current_user: Authenticated user information from JWT token
+        
+    Returns:
+        Dict containing user profile information
+    """
+    return {
+        "username": current_user.get("username"),
+        "email": current_user.get("email"),
+        "user_id": current_user.get("sub"),
+        "groups": current_user.get("cognito:groups", []),
+        "roles": current_user.get("cognito:roles", []),
+        "auth_time": current_user.get("auth_time"),
+        "token_expires": current_user.get("exp")
+    }
+
+
+@app.post("/auth/confirm-signup")
+async def confirm_signup(
+    username: str = Form(...),
+    confirmation_code: str = Form(...)
+):
+    """
+    Confirm user signup with verification code sent to email.
+    
+    Args:
+        username: User's email address (used as username in Cognito)
+        confirmation_code: 6-digit verification code sent to email
+        
+    Returns:
+        Dict with confirmation status
+        
+    Raises:
+        HTTPException: If confirmation fails
+    """
+    try:
+        response = cognito_client.confirm_sign_up(
+            ClientId=APP_CLIENT_ID,
+            Username=username,
+            ConfirmationCode=confirmation_code
+        )
+        
+        return {
+            "message": "Account confirmed successfully",
+            "username": username,
+            "status": "confirmed"
+        }
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        
+        if error_code == 'CodeMismatchException':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification code. Please check your email and try again."
+            )
+        elif error_code == 'ExpiredCodeException':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Verification code has expired. Please request a new code."
+            )
+        elif error_code == 'UserNotFoundException':
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found. Please check your email address."
+            )
+        elif error_code == 'NotAuthorizedException':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already confirmed or confirmation is not required."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Confirmation failed: {error_message}"
+            )
+
+
+@app.post("/auth/resend-confirmation")
+async def resend_confirmation_code(
+    username: str = Form(...)
+):
+    """
+    Resend verification code to user's email address.
+    
+    Args:
+        username: User's email address (used as username in Cognito)
+        
+    Returns:
+        Dict with resend status
+        
+    Raises:
+        HTTPException: If resend fails
+    """
+    try:
+        response = cognito_client.resend_confirmation_code(
+            ClientId=APP_CLIENT_ID,
+            Username=username
+        )
+        
+        return {
+            "message": "Verification code sent successfully",
+            "username": username,
+            "delivery_medium": response.get('CodeDeliveryDetails', {}).get('DeliveryMedium', 'EMAIL')
+        }
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        
+        if error_code == 'UserNotFoundException':
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found. Please check your email address."
+            )
+        elif error_code == 'InvalidParameterException':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid email address format."
+            )
+        elif error_code == 'LimitExceededException':
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests. Please wait before requesting another code."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to resend code: {error_message}"
+            )
+
+
+@app.post("/auth/signup")
+async def signup_user(
+    username: str = Form(...),
+    password: str = Form(...),
+    email: str = Form(...)
+):
+    """
+    Sign up a new user with email verification.
+    
+    Args:
+        username: User's email address (used as username in Cognito)
+        password: User's password
+        email: User's email address
+        
+    Returns:
+        Dict with signup status and next steps
+        
+    Raises:
+        HTTPException: If signup fails
+    """
+    try:
+        response = cognito_client.sign_up(
+            ClientId=APP_CLIENT_ID,
+            Username=username,
+            Password=password,
+            UserAttributes=[
+                {
+                    'Name': 'email',
+                    'Value': email
+                }
+            ]
+        )
+        
+        return {
+            "message": "User created successfully. Please check your email for verification code.",
+            "username": username,
+            "user_confirmed": response.get('UserConfirmed', False),
+            "next_step": "confirm_signup" if not response.get('UserConfirmed', False) else "signin"
+        }
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        
+        if error_code == 'UsernameExistsException':
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists."
+            )
+        elif error_code == 'InvalidPasswordException':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password does not meet requirements. Must be at least 8 characters with uppercase, lowercase, and numbers."
+            )
+        elif error_code == 'InvalidParameterException':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid email address or password format."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Signup failed: {error_message}"
+            )
+
+
+@app.post("/auth/signin")
+async def signin_user(
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    """
+    Sign in a user with email and password.
+    
+    Args:
+        username: User's email address (used as username in Cognito)
+        password: User's password
+        
+    Returns:
+        Dict with signin status and tokens if successful
+        
+    Raises:
+        HTTPException: If signin fails
+    """
+    try:
+        response = cognito_client.admin_initiate_auth(
+            UserPoolId=USER_POOL_ID,
+            ClientId=APP_CLIENT_ID,
+            AuthFlow='ADMIN_NO_SRP_AUTH',
+            AuthParameters={
+                'USERNAME': username,
+                'PASSWORD': password
+            }
+        )
+        
+        # Check if user needs to be confirmed
+        if response.get('ChallengeName') == 'NEW_PASSWORD_REQUIRED':
+            return {
+                "message": "New password required",
+                "challenge": "NEW_PASSWORD_REQUIRED",
+                "session": response.get('Session')
+            }
+        
+        # Extract tokens from successful authentication
+        auth_result = response.get('AuthenticationResult', {})
+        
+        return {
+            "message": "Sign in successful",
+            "access_token": auth_result.get('AccessToken'),
+            "id_token": auth_result.get('IdToken'),
+            "refresh_token": auth_result.get('RefreshToken'),
+            "token_type": auth_result.get('TokenType', 'Bearer'),
+            "expires_in": auth_result.get('ExpiresIn')
+        }
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        
+        if error_code == 'NotAuthorizedException':
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password."
+            )
+        elif error_code == 'UserNotFoundException':
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No account found with this email address."
+            )
+        elif error_code == 'UserNotConfirmedException':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please verify your email address before signing in. Check your email for the verification code."
+            )
+        elif error_code == 'PasswordResetRequiredException':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password reset is required. Please reset your password."
+            )
+        elif error_code == 'UserTemporarilyLockedException':
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail="Account is temporarily locked due to too many failed sign-in attempts."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Sign in failed: {error_message}"
+            )
+
+@app.post("/generate")
+async def generate_docs(
+    input_type: str = Form(...),
+    input_data: str = Form(None),
+    zip_file: UploadFile = File(None),
+    branch: str = Form(None),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    print("/generate")
+    if input_type == "zip" and zip_file:
+        content = await zip_file.read()
+        base64_zip = base64.b64encode(content).decode("utf-8")
+        state = DocGenState(input_type="zip", input_data=base64_zip, branch=branch, preferences=DocGenPreferences(
+            generate_readme=True,
+            generate_summary=True,
+            visualize_structure=True
+        ))
+    else:
+        state = DocGenState(input_type=input_type, input_data=input_data, branch=branch, preferences=DocGenPreferences(
+            generate_readme=True,
+            generate_summary=True,
+            visualize_structure=True
+        ))
+
+    result = run_pipeline(state)
+
+    return {
+        "readme": result.get("readme"),
+        "summaries": result.get("summaries"),
+        "modified_files": result.get("modified_files"),
+        "visuals": result.get("visuals"),
+        "folder_tree": result.get("folder_tree"),
+        "input_type": result.get("input_type")
+    }
+
+@app.post("/download-zip")
+async def download_modified_zip(modified_files_json: str = Form(...)):
+    modified_files = json.loads(modified_files_json)
+    zip_stream = io.BytesIO()
+
+    with zipfile.ZipFile(zip_stream, "w", zipfile.ZIP_DEFLATED) as zf:
+        for filepath, code in modified_files.items():
+            zf.writestr(filepath, code)
+
+    zip_stream.seek(0)
+    return StreamingResponse(
+        zip_stream,
+        media_type="application/x-zip-compressed",
+        headers={"Content-Disposition": "attachment; filename=modified_code.zip"}
+    )
+
+from fastapi.responses import JSONResponse
+import uuid
+
+zip_store = {}
+
+@app.post("/generate-and-download")
+async def generate_and_download(
+    input_type: str = Form(...),
+    input_data: str = Form(None),
+    zip_file: UploadFile = File(None),
+    branch: str = Form(None),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    if input_type == "zip" and zip_file:
+        content = await zip_file.read()
+        base64_zip = base64.b64encode(content).decode("utf-8")
+        state = DocGenState(input_type="zip", input_data=base64_zip, branch=branch, preferences=DocGenPreferences(
+            generate_readme=True,
+            generate_summary=True,
+            visualize_structure=True
+        ))
+    else:
+        state = DocGenState(input_type=input_type, input_data=input_data, branch=branch, preferences=DocGenPreferences(
+            generate_readme=True,
+            generate_summary=True,
+            visualize_structure=True
+        ))
+
+    result = run_pipeline(state)
+    modified_files = result.get("modified_files", {})
+    readme = result.get("readme")
+
+    zip_stream = io.BytesIO()
+    with zipfile.ZipFile(zip_stream, "w", zipfile.ZIP_DEFLATED) as zf:
+        for filepath, code in modified_files.items():
+            zf.writestr(filepath, code)
+        if readme:
+            zf.writestr("README.md", readme)
+    zip_stream.seek(0)
+
+    download_id = str(uuid.uuid4())
+    zip_store[download_id] = zip_stream.getvalue()
+
+    return {
+        "download_url": f"/download-zip/{download_id}",
+        "readme": result.get("readme"),
+        "summaries": result.get("summaries"),
+        "modified_files": result.get("modified_files"),
+        "visuals": result.get("visuals"),
+        "folder_tree": result.get("folder_tree"),
+        "input_type": result.get("input_type")
+    }
+
+@app.get("/download-zip/{download_id}")
+def download_zip(download_id: str):
+    zip_bytes = zip_store.get(download_id)
+    if not zip_bytes:
+        return JSONResponse({"error": "Invalid or expired download ID"}, status_code=404)
+
+    return StreamingResponse(
+        io.BytesIO(zip_bytes),
+        media_type="application/x-zip-compressed",
+        headers={"Content-Disposition": "attachment; filename=docgen_output.zip"}
+    )
