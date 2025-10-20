@@ -6,14 +6,15 @@ from app.graph.graph import run_pipeline
 from app.models.state import DocGenState, DocGenPreferences
 from app.utils.cognito_auth import verify_cognito_token, extract_bearer_token, get_user_info_from_token
 from fastapi.responses import StreamingResponse
-import io
+import io, os
 import zipfile
 import json
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
-
+from dotenv import load_dotenv
+load_dotenv()
 app = FastAPI(
     title="RepoX Backend API",
     description="Backend API for RepoX with AWS Cognito authentication",
@@ -33,7 +34,6 @@ app.add_middleware(
 security = HTTPBearer()
 
 # AWS Cognito client for user management operations
-import os
 
 cognito_client = boto3.client('cognito-idp', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 USER_POOL_ID = os.getenv('COGNITO_USER_POOL_ID', 'us-east-1_YOUR_USERPOOL_ID')
@@ -67,7 +67,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
 @app.get("/")
 def read_root():
-    """Health check endpoint - no authentication required."""
     return {"message": "Hello from FastAPI on Render!"}
 
 
@@ -234,7 +233,6 @@ async def resend_confirmation_code(
 
 @app.post("/auth/signup")
 async def signup_user(
-    username: str = Form(...),
     password: str = Form(...),
     email: str = Form(...)
 ):
@@ -242,9 +240,8 @@ async def signup_user(
     Sign up a new user with email verification.
     
     Args:
-        username: User's email address (used as username in Cognito)
         password: User's password
-        email: User's email address
+        email: User's email address (also used as username)
         
     Returns:
         Dict with signup status and next steps
@@ -255,7 +252,7 @@ async def signup_user(
     try:
         response = cognito_client.sign_up(
             ClientId=APP_CLIENT_ID,
-            Username=username,
+            Username=email,  # FIXED: Added Username parameter
             Password=password,
             UserAttributes=[
                 {
@@ -267,7 +264,7 @@ async def signup_user(
         
         return {
             "message": "User created successfully. Please check your email for verification code.",
-            "username": username,
+            "username": email,  # FIXED: Return username
             "user_confirmed": response.get('UserConfirmed', False),
             "next_step": "confirm_signup" if not response.get('UserConfirmed', False) else "signin"
         }
@@ -317,15 +314,20 @@ async def signin_user(
         HTTPException: If signin fails
     """
     try:
-        response = cognito_client.admin_initiate_auth(
-            UserPoolId=USER_POOL_ID,
+        print(f"Attempting signin for: {username}")  # Debug log
+        print(f"Using Client ID: {APP_CLIENT_ID}")  # Debug log
+        
+        # Use initiate_auth instead of admin_initiate_auth
+        response = cognito_client.initiate_auth(
             ClientId=APP_CLIENT_ID,
-            AuthFlow='ADMIN_NO_SRP_AUTH',
+            AuthFlow='USER_PASSWORD_AUTH',
             AuthParameters={
                 'USERNAME': username,
                 'PASSWORD': password
             }
         )
+        
+        print(f"Signin response: {response}")  # Debug log
         
         # Check if user needs to be confirmed
         if response.get('ChallengeName') == 'NEW_PASSWORD_REQUIRED':
@@ -351,10 +353,17 @@ async def signin_user(
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
         
-        if error_code == 'NotAuthorizedException':
+        print(f"Signin error: {error_code} - {error_message}")  # Debug log
+        
+        if error_code == 'InvalidParameterException':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Authentication flow not enabled. Error: {error_message}. Please enable USER_PASSWORD_AUTH in your Cognito App Client settings."
+            )
+        elif error_code == 'NotAuthorizedException':
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password."
+                detail=f"Incorrect username or password. Details: {error_message}"
             )
         elif error_code == 'UserNotFoundException':
             raise HTTPException(
@@ -371,15 +380,15 @@ async def signin_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Password reset is required. Please reset your password."
             )
-        elif error_code == 'UserTemporarilyLockedException':
+        elif error_code == 'TooManyRequestsException':
             raise HTTPException(
-                status_code=status.HTTP_423_LOCKED,
-                detail="Account is temporarily locked due to too many failed sign-in attempts."
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests. Please try again later."
             )
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Sign in failed: {error_message}"
+                detail=f"Sign in failed: {error_code} - {error_message}"
             )
 
 @app.post("/generate")
