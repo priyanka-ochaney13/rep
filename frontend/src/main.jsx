@@ -4,6 +4,8 @@ import './index.css'
 import App from './App.jsx'
 import RepositoriesPage from './pages/Repositories.jsx';
 import RepoDocsPage from './pages/RepoDocs.jsx';
+import FeaturesPage from './pages/Features.jsx';
+import Profile from './components/Profile.jsx';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { RepoProvider } from './store/repoStore.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
@@ -47,8 +49,10 @@ createRoot(document.getElementById('root')).render(
         <RepoProvider>
           <Routes>
             <Route path="/" element={<App />} />
+            <Route path="/features" element={<FeaturesPage />} />
             <Route path="/repositories" element={<PrivateRoute><RepositoriesPage /></PrivateRoute>} />
             <Route path="/docs/:owner/:name" element={<PrivateRoute><RepoDocsPage /></PrivateRoute>} />
+            <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
           </Routes>
         </RepoProvider>
       </BrowserRouter>

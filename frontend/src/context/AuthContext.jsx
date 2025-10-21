@@ -7,6 +7,7 @@ import {
   fetchUserAttributes,
   confirmSignUp
 } from 'aws-amplify/auth';
+import { testProtectedEndpoint } from '../api/apiClient';
 
 const AuthContext = createContext(null);
 
@@ -34,6 +35,14 @@ export function AuthProvider({ children }) {
         email: attributes.email,
         displayName: attributes.name || attributes.email?.split('@')[0],
       });
+      
+      // Test backend connection
+      try {
+        const backendResponse = await testProtectedEndpoint();
+        console.log('✅ Backend connection verified:', backendResponse);
+      } catch (backendError) {
+        console.warn('⚠️ Backend connection failed:', backendError);
+      }
     } catch (err) {
       setUser(null);
     } finally {

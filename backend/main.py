@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.graph.graph import run_pipeline
 from app.models.state import DocGenState, DocGenPreferences
-from app.utils.cognito_auth import verify_cognito_token, extract_bearer_token, get_user_info_from_token
+from app.utils.cognito_auth import verify_cognito_token, get_user_info_from_token
 from fastapi.responses import StreamingResponse
 import io, os
 import zipfile
@@ -53,8 +53,9 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     Raises:
         HTTPException: If token is invalid or verification fails
     """
-    # Extract the Bearer token
-    token = extract_bearer_token(credentials.credentials)
+    # HTTPBearer already extracts the token from "Bearer TOKEN" format
+    # So credentials.credentials contains just the token string
+    token = credentials.credentials
     
     # Verify the token with Cognito
     claims = verify_cognito_token(token)

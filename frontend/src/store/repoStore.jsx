@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+import { generateDocs } from '../api/apiClient';
 
 // --- Types / Constants --------------------------------------------------
 // Status flow: Pending -> Processing -> Ready | Failed
@@ -103,23 +104,32 @@ export function RepoProvider({ children }) {
     dispatch({ type: ACTIONS.UPDATE, id, patch });
   }, []);
 
-  const simulateGeneration = React.useCallback((id) => {
+  const simulateGeneration = React.useCallback(async (id, githubUrl) => {
     updateRepo(id, { status: 'Processing' });
-    const duration = 1200 + Math.random() * 2000;
-    setTimeout(() => {
-      const failed = Math.random() < 0.08; // 8% failure chance
-      if (failed) {
-        updateRepo(id, { status: 'Failed' });
-        return;
-      }
+    
+    try {
+      // Call the backend API to generate documentation
+      const result = await generateDocs({
+        inputType: 'url',
+        inputData: githubUrl,
+        branch: 'main'
+      });
+      
+      // Update repo with the generated documentation
       updateRepo(id, {
         status: 'Ready',
         docs: {
-          summary: 'Automated summary generated on ' + new Date().toLocaleString(),
-          changelog: [{ date: todayISO(), entry: 'Initial auto-generated docs.' }]
+          readme: result.readme || '',
+          summary: result.summaries || 'Automated summary generated on ' + new Date().toLocaleString(),
+          changelog: [{ date: todayISO(), entry: 'Initial auto-generated docs.' }],
+          visuals: result.visuals || null,
+          folderTree: result.folder_tree || null,
         }
       });
-    }, duration);
+    } catch (error) {
+      console.error('Generation failed:', error);
+      updateRepo(id, { status: 'Failed' });
+    }
   }, [updateRepo]);
 
   const fetchGitHubMeta = React.useCallback(async (id, owner, name) => {
@@ -165,15 +175,19 @@ export function RepoProvider({ children }) {
     };
     dispatch({ type: ACTIONS.ADD, payload: newRepo });
     // Kick off async tasks
-    simulateGeneration(id);
+    simulateGeneration(id, githubUrl);
     fetchGitHubMeta(id, owner, name);
     return { id };
   }, [simulateGeneration, fetchGitHubMeta]);
 
   const retryGeneration = React.useCallback((id) => {
+    const repo = repos.find(r => r.id === id);
+    if (!repo) return;
+    
+    const githubUrl = `https://github.com/${repo.owner}/${repo.name}`;
     updateRepo(id, { status: 'Pending' });
-    simulateGeneration(id);
-  }, [simulateGeneration, updateRepo]);
+    simulateGeneration(id, githubUrl);
+  }, [simulateGeneration, updateRepo, repos]);
 
   const value = {
     repos,
