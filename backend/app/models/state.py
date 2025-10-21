@@ -23,3 +23,4 @@ class DocGenState(BaseModel):
     branch: Optional[str] = None
     commit_status: Optional[str] = None
     commit_message: Optional[str] = None
+    project_analysis: Optional[Dict[str, Any]] = None  # Project structure and detailed analysis

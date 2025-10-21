@@ -1117,3 +1117,29 @@
     transform: translateY(0);
   }
 }
+
+/* File Analysis Card Styles */
+.file-analysis-card {
+  animation: slideUp 0.3s ease-out;
+}
+
+.file-analysis-card:hover {
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+}
+
+.structure-stats {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .file-analysis-card > div:first-child {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+  
+  .structure-stats {
+    grid-template-columns: 1fr !important;
+  }
+}

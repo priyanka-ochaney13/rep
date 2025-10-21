@@ -447,6 +447,7 @@ async def generate_docs(
         "input_type": result.get("input_type"),
         "commit_status": result.get("commit_status"),
         "commit_message": result.get("commit_message"),
+        "project_analysis": result.get("project_analysis"),
     }
 
 @app.post("/commit-readme")

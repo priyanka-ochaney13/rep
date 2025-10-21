@@ -206,6 +206,7 @@ export function RepoProvider({ children }) {
           changelog: [{ date: todayISO(), entry: 'Initial auto-generated docs.' }],
           visuals: result.visuals || null,
           folderTree: result.folder_tree || null,
+          projectAnalysis: result.project_analysis || null, // Add project analysis
         },
         commitStatus: result.commit_status,
         commitMessage: result.commit_message,

@@ -467,7 +467,7 @@ function DiagramCard({ title, diagramText, diagramError, diagramKey, index }) {
             disabled={isExporting}
             title="Export as JPEG"
           >
-            {isExporting ? '⏳' : '📥'} Export
+            {isExporting ? '' : ''} Export
           </button>
           <label className="zoom-toggle" title="Toggle Zoom">
             <input 
@@ -626,20 +626,19 @@ function DiagramCard({ title, diagramText, diagramError, diagramKey, index }) {
   );
 }
 
-// Code Analysis Tab Component
+// Code Analysis Tab Component - Enhanced with Project Structure
 function CodeAnalysisTab({ repo }) {
   const summaries = repo.docs?.summary;
+  const projectAnalysis = repo.docs?.projectAnalysis;
   
   // Debug: log what we're getting
   React.useEffect(() => {
+    console.log('📊 Project Analysis data:', projectAnalysis);
     console.log('📊 Summaries data:', summaries);
-    console.log('📊 Type:', typeof summaries);
-    if (summaries && typeof summaries === 'object') {
-      console.log('📊 Keys:', Object.keys(summaries));
-    }
-  }, [summaries]);
+  }, [summaries, projectAnalysis]);
   
   const hasSummaries = summaries && typeof summaries === 'object' && Object.keys(summaries).length > 0;
+  const hasAnalysis = projectAnalysis && projectAnalysis.detailed_analysis;
 
   // Group files by directory
   const groupedFiles = React.useMemo(() => {
@@ -669,13 +668,78 @@ function CodeAnalysisTab({ repo }) {
   return (
     <div className="tab-panel">
       <div className="tab-panel-header">
-        <h2>🔍 Code Analysis & Key Functions</h2>
+        <h2>Code Analysis & Project Structure</h2>
         <p className="tab-panel-desc">
-          AI-powered analysis of your codebase with explanations of main functions and modules
+          Detailed breakdown of your project structure with AI-powered analysis of each file's purpose and key functions
         </p>
       </div>
 
-      {hasSummaries && Object.keys(groupedFiles).length > 0 ? (
+      {/* Project Structure Tree */}
+      {hasAnalysis && projectAnalysis.structure_tree && (
+        <div className="content-card" style={{ marginBottom: '2rem' }}>
+          <h3 className="card-title">📂 Project Structure</h3>
+          <div className="structure-stats" style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+            gap: '1rem',
+            marginBottom: '1.5rem',
+            padding: '1rem',
+            background: 'rgba(99, 102, 241, 0.1)',
+            borderRadius: '8px',
+            border: '1px solid rgba(99, 102, 241, 0.3)'
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#6366f1' }}>
+                {projectAnalysis.file_count || 0}
+              </div>
+              <div style={{ fontSize: '0.875rem', color: '#8b949e' }}>Files Analyzed</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>
+                {projectAnalysis.languages?.length || 0}
+              </div>
+              <div style={{ fontSize: '0.875rem', color: '#8b949e' }}>Languages</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f59e0b' }}>
+                {Object.keys(projectAnalysis.detailed_analysis || {}).length}
+              </div>
+              <div style={{ fontSize: '0.875rem', color: '#8b949e' }}>Detailed Analyses</div>
+            </div>
+          </div>
+          <pre style={{ 
+            background: '#0f1724', 
+            padding: '1.5rem', 
+            borderRadius: '8px', 
+            overflow: 'auto',
+            fontSize: '0.875rem',
+            lineHeight: '1.8',
+            fontFamily: 'ui-monospace, monospace',
+            color: '#d0d7e2'
+          }}>
+            {projectAnalysis.structure_tree}
+          </pre>
+        </div>
+      )}
+
+      {/* Detailed File Analysis */}
+      {hasAnalysis && projectAnalysis.detailed_analysis ? (
+        <div className="analysis-container">
+          <h3 style={{ 
+            fontSize: '1.25rem', 
+            marginBottom: '1.5rem',
+            color: '#d0d7e2',
+            fontWeight: '600'
+          }}>
+            📋 Detailed File Analysis
+          </h3>
+          
+          {Object.entries(projectAnalysis.detailed_analysis).map(([filepath, analysis]) => (
+            <FileAnalysisCard key={filepath} filepath={filepath} analysis={analysis} />
+          ))}
+        </div>
+      ) : hasSummaries && Object.keys(groupedFiles).length > 0 ? (
+        // Fallback to old summary display if new analysis not available
         <div className="analysis-container">
           {Object.entries(groupedFiles).map(([directory, files]) => (
             <div key={directory} className="directory-section">
@@ -736,6 +800,248 @@ function CodeAnalysisTab({ repo }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// New component for displaying detailed file analysis
+function FileAnalysisCard({ filepath, analysis }) {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  
+  const getFileIcon = (filename) => {
+    if (filename.endsWith('.py')) return '🐍';
+    if (filename.endsWith('.js') || filename.endsWith('.jsx')) return '📜';
+    if (filename.endsWith('.ts') || filename.endsWith('.tsx')) return '📘';
+    if (filename.endsWith('.java')) return '☕';
+    if (filename.endsWith('.go')) return '🔵';
+    if (filename.endsWith('.json') || filename.endsWith('.yaml')) return '⚙️';
+    if (filename.endsWith('.css') || filename.endsWith('.scss')) return '🎨';
+    if (filename.endsWith('.html')) return '🌐';
+    return '📄';
+  };
+
+  const filename = filepath.split('/').pop();
+  const directory = filepath.substring(0, filepath.lastIndexOf('/')) || 'root';
+
+  return (
+    <div className="file-analysis-card" style={{
+      background: '#0f1724',
+      border: '1px solid #1f2b3b',
+      borderRadius: '12px',
+      marginBottom: '1.5rem',
+      overflow: 'hidden',
+      transition: 'all 0.2s ease'
+    }}>
+      {/* File Header */}
+      <div 
+        onClick={() => setIsExpanded(!isExpanded)}
+        style={{
+          padding: '1.25rem',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: isExpanded ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+          transition: 'background 0.2s ease'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+          <span style={{ fontSize: '1.5rem' }}>{getFileIcon(filename)}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ 
+              fontWeight: '600', 
+              color: '#d0d7e2',
+              fontSize: '1rem',
+              marginBottom: '0.25rem'
+            }}>
+              {filename}
+            </div>
+            <div style={{ 
+              fontSize: '0.75rem', 
+              color: '#8b949e',
+              fontFamily: 'ui-monospace, monospace'
+            }}>
+              {directory}
+            </div>
+          </div>
+          {analysis.language && (
+            <span style={{
+              padding: '0.25rem 0.75rem',
+              background: 'rgba(99, 102, 241, 0.2)',
+              border: '1px solid rgba(99, 102, 241, 0.4)',
+              borderRadius: '12px',
+              fontSize: '0.75rem',
+              color: '#a5b4fc',
+              fontWeight: '500'
+            }}>
+              {analysis.language}
+            </span>
+          )}
+        </div>
+        <div style={{
+          fontSize: '1.25rem',
+          color: '#6b7280',
+          transition: 'transform 0.2s ease',
+          transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+        }}>
+          ▼
+        </div>
+      </div>
+
+      {/* File Details - Expandable */}
+      {isExpanded && (
+        <div style={{ padding: '0 1.25rem 1.25rem 1.25rem' }}>
+          {/* Purpose */}
+          {analysis.purpose && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ 
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                color: '#8b949e',
+                marginBottom: '0.5rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                Purpose
+              </h4>
+              <p style={{ 
+                color: '#d0d7e2',
+                lineHeight: '1.6',
+                fontSize: '0.9375rem'
+              }}>
+                {analysis.purpose}
+              </p>
+            </div>
+          )}
+
+          {/* Key Functions */}
+          {analysis.functions && analysis.functions.length > 0 && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ 
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                color: '#8b949e',
+                marginBottom: '0.75rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                Key Functions & Components
+              </h4>
+              <div style={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem'
+              }}>
+                {analysis.functions.map((func, idx) => (
+                  <div key={idx} style={{
+                    padding: '0.75rem',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
+                    color: '#d0d7e2',
+                    fontFamily: 'ui-monospace, monospace',
+                    lineHeight: '1.5'
+                  }}>
+                    {func}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Technical Details */}
+          {analysis.key_details && analysis.key_details.length > 0 && (
+            <div>
+              <h4 style={{ 
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                color: '#8b949e',
+                marginBottom: '0.75rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                Technical Details
+              </h4>
+              <ul style={{ 
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem'
+              }}>
+                {analysis.key_details.map((detail, idx) => (
+                  <li key={idx} style={{
+                    padding: '0.625rem 0.75rem',
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                    color: '#d0d7e2',
+                    lineHeight: '1.5',
+                    paddingLeft: '2rem',
+                    position: 'relative'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      left: '0.75rem',
+                      color: '#f59e0b'
+                    }}>
+                      ▸
+                    </span>
+                    {detail}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Symbols/Exports */}
+          {analysis.symbols && analysis.symbols.length > 0 && (
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #1f2b3b' }}>
+              <h4 style={{ 
+                fontSize: '0.75rem',
+                fontWeight: '600',
+                color: '#6b7280',
+                marginBottom: '0.5rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                Detected Symbols
+              </h4>
+              <div style={{ 
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '0.5rem'
+              }}>
+                {analysis.symbols.slice(0, 10).map((symbol, idx) => (
+                  <span key={idx} style={{
+                    padding: '0.25rem 0.625rem',
+                    background: 'rgba(107, 114, 128, 0.2)',
+                    border: '1px solid rgba(107, 114, 128, 0.4)',
+                    borderRadius: '4px',
+                    fontSize: '0.75rem',
+                    color: '#9ca3af',
+                    fontFamily: 'ui-monospace, monospace'
+                  }}>
+                    {symbol}
+                  </span>
+                ))}
+                {analysis.symbols.length > 10 && (
+                  <span style={{
+                    padding: '0.25rem 0.625rem',
+                    color: '#6b7280',
+                    fontSize: '0.75rem'
+                  }}>
+                    +{analysis.symbols.length - 10} more
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

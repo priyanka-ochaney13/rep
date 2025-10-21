@@ -7,6 +7,7 @@ from app.graph.nodes.summarize_code import summarize_code_node
 from app.graph.nodes.generate_readme import generate_readme
 from app.graph.nodes.visualize_code import visualize_code_node
 from app.graph.nodes.commit_readme import commit_and_push_readme
+from app.graph.nodes.analyze_project import analyze_project_structure
 from app.graph.nodes.output_node import output_node
 
 logger = logging.getLogger(__name__)
@@ -47,11 +48,15 @@ def run_pipeline(state: DocGenState) -> Dict[str, Any]:
     state = commit_and_push_readme(state)
     
     # 6) Visualize structure
-    logger.info("📊 Step 6/7: Creating visualizations...")
+    logger.info("📊 Step 6/8: Creating visualizations...")
     state = visualize_code_node(state)
     
-    # 7) Final output processing
-    logger.info("✅ Step 7/7: Processing final output...")
+    # 7) Analyze project structure
+    logger.info("📋 Step 7/8: Generating detailed project analysis...")
+    state = analyze_project_structure(state)
+    
+    # 8) Final output processing
+    logger.info("✅ Step 8/8: Processing final output...")
     
     logger.info("=" * 60)
     logger.info("✨ Documentation Generation Complete!")
@@ -70,4 +75,5 @@ def run_pipeline(state: DocGenState) -> Dict[str, Any]:
         "input_type": state.input_type,
         "commit_status": state.commit_status,
         "commit_message": state.commit_message,
+        "project_analysis": state.project_analysis,
     }
