@@ -1,4 +1,5 @@
 import base64
+import logging
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -14,6 +15,14 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 load_dotenv()
 app = FastAPI(
     title="RepoX Backend API",
@@ -417,6 +426,14 @@ async def generate_docs(
         ))
 
     result = run_pipeline(state)
+    
+    # Debug logging
+    logger.info("=" * 60)
+    logger.info("📤 API Response Preview:")
+    logger.info(f"README length: {len(result.get('readme', '')) if result.get('readme') else 0} characters")
+    logger.info(f"Summaries count: {len(result.get('summaries', {})) if result.get('summaries') else 0} files")
+    logger.info(f"Summaries keys: {list(result.get('summaries', {}).keys()) if result.get('summaries') else []}")
+    logger.info("=" * 60)
 
     return {
         "readme": result.get("readme"),

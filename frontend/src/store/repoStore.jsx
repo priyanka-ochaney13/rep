@@ -95,7 +95,14 @@ export function RepoProvider({ children }) {
 
   // Persist anytime repos changes
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(repos)); } catch { /* ignore */ }
+    if (repos.length > 0) {
+      console.log('💾 Saving to localStorage:', repos.length, 'repos');
+      try { 
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(repos)); 
+      } catch (err) { 
+        console.error('❌ Failed to save to localStorage:', err);
+      }
+    }
   }, [repos]);
 
   // --- Actions ---------------------------------------------------------
@@ -104,7 +111,7 @@ export function RepoProvider({ children }) {
     dispatch({ type: ACTIONS.UPDATE, id, patch });
   }, []);
 
-  const simulateGeneration = React.useCallback(async (id, githubUrl) => {
+  const simulateGeneration = React.useCallback(async (id, githubUrl, owner, name) => {
     updateRepo(id, { status: 'Processing' });
     
     try {
@@ -115,8 +122,13 @@ export function RepoProvider({ children }) {
         branch: 'main'
       });
       
+      console.log('✅ Documentation generated successfully:', result);
+      console.log('📊 README length:', result.readme?.length || 0);
+      console.log('📊 Summaries:', result.summaries);
+      console.log('📊 Summaries count:', Object.keys(result.summaries || {}).length);
+      
       // Update repo with the generated documentation
-      updateRepo(id, {
+      const updatedDocs = {
         status: 'Ready',
         docs: {
           readme: result.readme || '',
@@ -125,9 +137,19 @@ export function RepoProvider({ children }) {
           visuals: result.visuals || null,
           folderTree: result.folder_tree || null,
         }
-      });
+      };
+      
+      console.log('💾 Saving docs to store:', updatedDocs.docs);
+      
+      updateRepo(id, updatedDocs);
+      
+      // Wait a bit to ensure localStorage is updated before navigating
+      setTimeout(() => {
+        console.log('📍 Navigating to docs page...');
+        window.location.href = `/docs/${owner}/${name}`;
+      }, 500);
     } catch (error) {
-      console.error('Generation failed:', error);
+      console.error('❌ Generation failed:', error);
       updateRepo(id, { status: 'Failed' });
     }
   }, [updateRepo]);
@@ -175,7 +197,7 @@ export function RepoProvider({ children }) {
     };
     dispatch({ type: ACTIONS.ADD, payload: newRepo });
     // Kick off async tasks
-    simulateGeneration(id, githubUrl);
+    simulateGeneration(id, githubUrl, owner, name);
     fetchGitHubMeta(id, owner, name);
     return { id };
   }, [simulateGeneration, fetchGitHubMeta]);
@@ -186,7 +208,7 @@ export function RepoProvider({ children }) {
     
     const githubUrl = `https://github.com/${repo.owner}/${repo.name}`;
     updateRepo(id, { status: 'Pending' });
-    simulateGeneration(id, githubUrl);
+    simulateGeneration(id, githubUrl, repo.owner, repo.name);
   }, [simulateGeneration, updateRepo, repos]);
 
   const value = {

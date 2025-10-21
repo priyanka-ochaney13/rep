@@ -25,10 +25,9 @@ try:
     # Initialize models only if env keys are likely present; otherwise fall back
     # (these providers require their own API keys configured via env)
     llm_readme = init_chat_model(
-        model="qwen-qwq-32b",
+        model="llama-3.3-70b-versatile",
         model_provider="groq",
         temperature=0.1,
-        reasoning_format="parsed",
     )
 
     llm_summary = init_chat_model(

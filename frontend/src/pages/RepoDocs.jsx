@@ -19,7 +19,13 @@ const DOC_SECTIONS = [
 export default function RepoDocsPage() {
   const { owner, name } = useParams();
   const { repos } = useRepos();
-  const repo = useMemo(() => repos.find(r => r.owner === owner && r.name === name), [repos, owner, name]);
+  const repo = useMemo(() => {
+    console.log('🔍 Looking for repo:', { owner, name });
+    console.log('📦 Available repos:', repos.map(r => ({ id: r.id, owner: r.owner, name: r.name })));
+    const found = repos.find(r => r.owner === owner && r.name === name);
+    console.log('✅ Found repo:', found);
+    return found;
+  }, [repos, owner, name]);
 
   if (!repo) {
     return (
@@ -28,6 +34,9 @@ export default function RepoDocsPage() {
         <main className="docs-page" style={{padding:"4rem 1.5rem"}}>
           <div className="docs-container">
             <p style={{opacity:.7}}>Repository not found.</p>
+            <p style={{opacity:.5, fontSize: '0.875rem', marginTop: '0.5rem'}}>
+              Looking for: {owner}/{name}
+            </p>
             <Link to="/repositories" className="btn-primary" style={{display:'inline-block',marginTop:'1.25rem'}}>← Back</Link>
           </div>
         </main>
@@ -76,11 +85,17 @@ export default function RepoDocsPage() {
               </section>
               <section id="summary" className="doc-section">
                 <h2>Code Summary</h2>
-                <p>{repo.docs?.summary || 'Summary generation pending.'}</p>
-                {repo.docs?.summary && !repo.docs?.summary.includes('pending') && (
-                  <ul className="summary-list">
-                    <li><strong>src/</strong> — Detected source modules overview (placeholder).</li>
-                  </ul>
+                {repo.docs?.summary && typeof repo.docs.summary === 'object' ? (
+                  <div>
+                    {Object.entries(repo.docs.summary).map(([filename, summary]) => (
+                      <div key={filename} style={{marginBottom: '1.5rem'}}>
+                        <h3 style={{fontSize: '1rem', fontWeight: '600', marginBottom: '0.5rem'}}>📄 {filename}</h3>
+                        <p style={{opacity: 0.9, lineHeight: '1.6'}}>{summary}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p>{typeof repo.docs?.summary === 'string' ? repo.docs.summary : 'Summary generation pending.'}</p>
                 )}
               </section>
               <section id="changelog" className="doc-section">
