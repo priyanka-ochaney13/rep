@@ -88,46 +88,93 @@ Generate only a **Code Summary** section in markdown based on these summaries. D
     merged_code_summary = "\n\n".join(partial_code_summaries)
 
     final_prompt = f"""
-You are an expert technical writer. Generate professional README.md documentation.
+You are a senior technical writer at a FAANG company. Generate a professional, enterprise-grade README.md following industry best practices.
 
-*CODEBASE:*
-📁 Folder Structure: {folder_structure}
-📄 Code Summaries: {merged_code_summary}
+CODEBASE INFORMATION:
+Folder Structure:
+{folder_structure}
 
-*GENERATE THESE SECTIONS:*
+Code Summaries:
+{merged_code_summary}
 
-# 1. PROJECT OVERVIEW
-- H1 title based on actual code content
-- What the project does and main purpose
-- Key features from code summaries
-- Tech stack used
+REQUIRED SECTIONS (in this exact order):
 
-# 2. ARCHITECTURE 
-- Project structure and main components
-- How components interact
-- Directory organization
+# Project Name
+[Derive from code/folder name - single line H1 title]
 
-# 3. TECHNICAL DETAILS
-- *Core Components* - main app logic
-- *Supporting Modules* - utilities, helpers
-- *Configuration* - config files, setup
-- *Additional Features* - extras, integrations
+## Overview
+Provide a clear, concise description of what this project does and its primary purpose. Focus on the problem it solves and value it provides.
 
-# 4. API REFERENCE (if APIs exist)
-- Endpoints and purpose
-- Request/response formats
+## Features
+- List key capabilities and functionality
+- Each feature should be actionable and user-focused
+- Use bullet points for clarity
 
-# 5. SETUP & USAGE
-- Installation steps
-- How to run/build
-- Basic usage examples
+## Architecture
+Describe the high-level system design:
+- Main components and their responsibilities
+- Data flow and component interactions
+- Directory structure explanation
+- Design patterns used
 
-*RULES:*
-- Use only info from provided summaries
-- Add emojis to section headers
-- Skip sections not applicable to codebase
-- Output plain Markdown only
-- Be factual and developer-focused
+## Getting Started
+
+### Prerequisites
+List all dependencies, tools, and environment requirements.
+
+### Installation
+```bash
+# Provide clear, step-by-step installation commands
+```
+
+### Configuration
+Explain any configuration files, environment variables, or setup required.
+
+### Usage
+```bash
+# Show basic usage examples with actual commands
+```
+
+## API Documentation
+(Only include if APIs are present in the code)
+Document endpoints, methods, request/response formats.
+
+## Development
+
+### Project Structure
+```
+[Show annotated directory tree]
+```
+
+### Core Components
+Explain the main modules, classes, or functions and their purposes.
+
+### Building
+```bash
+# Commands to build/compile the project
+```
+
+### Testing
+```bash
+# Commands to run tests
+```
+
+## Contributing
+Brief guidelines for contributing to the project.
+
+## License
+Specify the license if identifiable from code.
+
+CRITICAL REQUIREMENTS:
+- NO emojis anywhere in the document
+- Use proper Markdown syntax (headers, code blocks, lists)
+- Be concise and professional - avoid marketing language
+- Only include information derivable from the code summaries provided
+- Skip sections if not applicable to the codebase
+- Use code blocks with appropriate language tags
+- Write in present tense, active voice
+- Follow Google's documentation style guide principles
+- Output ONLY the markdown content, no meta-commentary
 """
 
     try:

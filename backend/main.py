@@ -407,6 +407,7 @@ async def generate_docs(
     input_data: str = Form(None),
     zip_file: UploadFile = File(None),
     branch: str = Form(None),
+    commit_to_github: bool = Form(False),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     print("/generate")
@@ -416,13 +417,15 @@ async def generate_docs(
         state = DocGenState(input_type="zip", input_data=base64_zip, branch=branch, preferences=DocGenPreferences(
             generate_readme=True,
             generate_summary=True,
-            visualize_structure=True
+            visualize_structure=True,
+            commit_to_github=commit_to_github
         ))
     else:
         state = DocGenState(input_type=input_type, input_data=input_data, branch=branch, preferences=DocGenPreferences(
             generate_readme=True,
             generate_summary=True,
-            visualize_structure=True
+            visualize_structure=True,
+            commit_to_github=commit_to_github
         ))
 
     result = run_pipeline(state)
@@ -441,8 +444,69 @@ async def generate_docs(
         "modified_files": result.get("modified_files"),
         "visuals": result.get("visuals"),
         "folder_tree": result.get("folder_tree"),
-        "input_type": result.get("input_type")
+        "input_type": result.get("input_type"),
+        "commit_status": result.get("commit_status"),
+        "commit_message": result.get("commit_message"),
     }
+
+@app.post("/commit-readme")
+async def commit_readme_only(
+    input_data: str = Form(...),
+    readme_content: str = Form(...),
+    branch: str = Form("main"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Commit only the README without regenerating documentation.
+    Useful for committing after reviewing the generated README.
+    """
+    from app.graph.nodes.fetch_code import fetch_code
+    from app.graph.nodes.commit_readme import commit_and_push_readme
+    
+    logger.info("=" * 60)
+    logger.info("📝 Commit README Only Request")
+    logger.info(f"Repository: {input_data}")
+    logger.info("=" * 60)
+    
+    try:
+        # Create state and fetch the repository
+        state = DocGenState(
+            input_type="url",
+            input_data=input_data,
+            branch=branch,
+            readme=readme_content,
+            preferences=DocGenPreferences(
+                generate_readme=False,
+                generate_summary=False,
+                visualize_structure=False,
+                commit_to_github=True
+            )
+        )
+        
+        # Fetch/clone the repository
+        logger.info("📥 Cloning repository...")
+        state = fetch_code(state)
+        
+        # Commit the README
+        logger.info("🚀 Committing README...")
+        state = commit_and_push_readme(state)
+        
+        logger.info("=" * 60)
+        logger.info(f"Commit Status: {state.commit_status}")
+        logger.info(f"Commit Message: {state.commit_message}")
+        logger.info("=" * 60)
+        
+        return {
+            "commit_status": state.commit_status,
+            "commit_message": state.commit_message,
+        }
+        
+    except Exception as e:
+        logger.error(f"Error committing README: {str(e)}")
+        return {
+            "commit_status": "error",
+            "commit_message": f"Failed to commit: {str(e)}"
+        }
 
 @app.post("/download-zip")
 async def download_modified_zip(modified_files_json: str = Form(...)):

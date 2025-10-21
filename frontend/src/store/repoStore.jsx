@@ -52,6 +52,53 @@ const STORAGE_KEY = 'repox.repos.v1';
 
 function todayISO() { return new Date().toISOString().split('T')[0]; }
 
+// Helper function to detect languages from file summaries
+function detectLanguagesFromSummaries(summaries) {
+  if (!summaries || typeof summaries !== 'object') return 'Unknown';
+  
+  const languageCount = {};
+  const extensionMap = {
+    '.py': 'Python',
+    '.js': 'JavaScript',
+    '.jsx': 'JavaScript',
+    '.ts': 'TypeScript',
+    '.tsx': 'TypeScript',
+    '.java': 'Java',
+    '.cpp': 'C++',
+    '.c': 'C',
+    '.go': 'Go',
+    '.rs': 'Rust',
+    '.rb': 'Ruby',
+    '.php': 'PHP',
+    '.swift': 'Swift',
+    '.kt': 'Kotlin',
+    '.cs': 'C#',
+    '.html': 'HTML',
+    '.css': 'CSS',
+    '.scss': 'SCSS',
+  };
+  
+  // Count files by extension
+  Object.keys(summaries).forEach(filename => {
+    const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
+    const lang = extensionMap[ext];
+    if (lang) {
+      languageCount[lang] = (languageCount[lang] || 0) + 1;
+    }
+  });
+  
+  // Get languages sorted by count
+  const sortedLangs = Object.entries(languageCount)
+    .sort(([,a], [,b]) => b - a)
+    .map(([lang]) => lang);
+  
+  // Return top 2-3 languages
+  if (sortedLangs.length === 0) return 'Unknown';
+  if (sortedLangs.length === 1) return sortedLangs[0];
+  if (sortedLangs.length === 2) return sortedLangs.join(', ');
+  return sortedLangs.slice(0, 2).join(', ') + ' +' + (sortedLangs.length - 2);
+}
+
 // --- Reducer ------------------------------------------------------------
 
 const ACTIONS = {
@@ -111,7 +158,7 @@ export function RepoProvider({ children }) {
     dispatch({ type: ACTIONS.UPDATE, id, patch });
   }, []);
 
-  const simulateGeneration = React.useCallback(async (id, githubUrl, owner, name) => {
+  const simulateGeneration = React.useCallback(async (id, githubUrl, owner, name, commitToGithub = false) => {
     updateRepo(id, { status: 'Processing' });
     
     try {
@@ -119,7 +166,8 @@ export function RepoProvider({ children }) {
       const result = await generateDocs({
         inputType: 'url',
         inputData: githubUrl,
-        branch: 'main'
+        branch: 'main',
+        commitToGithub: commitToGithub
       });
       
       console.log('✅ Documentation generated successfully:', result);
@@ -127,16 +175,23 @@ export function RepoProvider({ children }) {
       console.log('📊 Summaries:', result.summaries);
       console.log('📊 Summaries count:', Object.keys(result.summaries || {}).length);
       
+      // Detect languages from the code summaries
+      const detectedLanguages = detectLanguagesFromSummaries(result.summaries);
+      console.log('🔍 Detected languages:', detectedLanguages);
+      
       // Update repo with the generated documentation
       const updatedDocs = {
         status: 'Ready',
+        lang: detectedLanguages, // Update with detected languages
         docs: {
           readme: result.readme || '',
           summary: result.summaries || 'Automated summary generated on ' + new Date().toLocaleString(),
           changelog: [{ date: todayISO(), entry: 'Initial auto-generated docs.' }],
           visuals: result.visuals || null,
           folderTree: result.folder_tree || null,
-        }
+        },
+        commitStatus: result.commit_status,
+        commitMessage: result.commit_message,
       };
       
       console.log('💾 Saving docs to store:', updatedDocs.docs);
@@ -185,8 +240,8 @@ export function RepoProvider({ children }) {
       name,
       owner,
       description: manual.description || '',
-      stars: Number(manual.stars) || 0,
-      lang: manual.language || 'JavaScript',
+      stars: 0, // Will be fetched from GitHub API
+      lang: 'Detecting...', // Will be updated from GitHub API or parsed data
       status: 'Pending',
       updatedAt: todayISO(),
       docs: {
@@ -197,7 +252,7 @@ export function RepoProvider({ children }) {
     };
     dispatch({ type: ACTIONS.ADD, payload: newRepo });
     // Kick off async tasks
-    simulateGeneration(id, githubUrl, owner, name);
+    simulateGeneration(id, githubUrl, owner, name, manual.commitToGithub || false);
     fetchGitHubMeta(id, owner, name);
     return { id };
   }, [simulateGeneration, fetchGitHubMeta]);
@@ -208,7 +263,8 @@ export function RepoProvider({ children }) {
     
     const githubUrl = `https://github.com/${repo.owner}/${repo.name}`;
     updateRepo(id, { status: 'Pending' });
-    simulateGeneration(id, githubUrl, repo.owner, repo.name);
+    // Retry without commit to GitHub by default (user can reconnect if they want to commit)
+    simulateGeneration(id, githubUrl, repo.owner, repo.name, false);
   }, [simulateGeneration, updateRepo, repos]);
 
   const value = {

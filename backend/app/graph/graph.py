@@ -6,6 +6,7 @@ from app.graph.nodes.parse_code import parse_code
 from app.graph.nodes.summarize_code import summarize_code_node
 from app.graph.nodes.generate_readme import generate_readme
 from app.graph.nodes.visualize_code import visualize_code_node
+from app.graph.nodes.commit_readme import commit_and_push_readme
 from app.graph.nodes.output_node import output_node
 
 logger = logging.getLogger(__name__)
@@ -38,18 +39,25 @@ def run_pipeline(state: DocGenState) -> Dict[str, Any]:
     state = summarize_only_node(state)
     
     # 4) Generate README
-    logger.info("📄 Step 4/6: Generating README with AI...")
+    logger.info("📄 Step 4/7: Generating README with AI...")
     state = generate_readme(state)
     
-    # 5) Visualize structure
-    logger.info("📊 Step 5/6: Creating visualizations...")
+    # 5) Commit README to GitHub
+    logger.info("🚀 Step 5/7: Committing README to GitHub...")
+    state = commit_and_push_readme(state)
+    
+    # 6) Visualize structure
+    logger.info("📊 Step 6/7: Creating visualizations...")
     state = visualize_code_node(state)
     
-    # 6) Final output processing
-    logger.info("✅ Step 6/6: Processing final output...")
+    # 7) Final output processing
+    logger.info("✅ Step 7/7: Processing final output...")
     
     logger.info("=" * 60)
     logger.info("✨ Documentation Generation Complete!")
+    if state.commit_status:
+        logger.info(f"📝 Commit Status: {state.commit_status}")
+        logger.info(f"📝 Message: {state.commit_message}")
     logger.info("=" * 60)
 
     # Return the data from state object (before output_node converts it)
@@ -60,4 +68,6 @@ def run_pipeline(state: DocGenState) -> Dict[str, Any]:
         "visuals": state.visuals or {},
         "folder_tree": state.working_dir or "",
         "input_type": state.input_type,
+        "commit_status": state.commit_status,
+        "commit_message": state.commit_message,
     }

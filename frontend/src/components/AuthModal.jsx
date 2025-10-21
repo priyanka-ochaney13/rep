@@ -140,7 +140,6 @@ export default function AuthModal() {
               <div className="field-group">
                 <label className="field-label">Verification Code</label>
                 <div className="input-wrapper">
-                  <span className="input-prefix">🔢</span>
                   <input 
                     type="text" 
                     required 
