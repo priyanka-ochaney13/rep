@@ -1,4 +1,6 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import '../App.css';
@@ -121,6 +123,19 @@ const useCases = [
 ];
 
 export default function FeaturesPage() {
+  const navigate = useNavigate();
+  const { user, setAuthModalOpen, setAuthModalTab, setRedirectPath } = useAuth();
+
+  const handleGetStarted = () => {
+    if (!user) {
+      setAuthModalTab('login');
+      setRedirectPath('/repositories');
+      setAuthModalOpen(true);
+    } else {
+      navigate('/repositories');
+    }
+  };
+
   return (
     <>
       <Header />
@@ -276,7 +291,7 @@ export default function FeaturesPage() {
             <div className="cta-row">
               <button 
                 className="btn-primary"
-                onClick={() => window.location.href = '/repositories'}
+                onClick={handleGetStarted}
               >
                 Connect Your First Repo →
               </button>

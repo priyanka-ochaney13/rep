@@ -123,6 +123,12 @@ export default function RepoDocsPage() {
             }}>
               <strong>Commit Failed: </strong>
               {commitError}
+              {commitError.includes('authentication') || commitError.includes('credentials') ? (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', opacity: 0.9 }}>
+                  💡 <strong>Tip:</strong> Make sure you have Git configured with your GitHub credentials.
+                  You may need to set up a Personal Access Token or SSH keys.
+                </div>
+              ) : null}
             </div>
           )}
           

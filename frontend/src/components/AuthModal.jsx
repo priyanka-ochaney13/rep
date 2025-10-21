@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useNavigate } from 'react-router-dom';
 
 export default function AuthModal() {
   const {
@@ -14,21 +15,33 @@ export default function AuthModal() {
     error,
     setError,
     redirectPath,
+    setRedirectPath,
     needsVerification,
     setNeedsVerification,
     pendingEmail,
     setPendingEmail,
+    user,
   } = useAuth();
-  const navigate = (path) => {
-    try { window.history.pushState({}, '', path); } catch {}
-    // No hard navigation here; routing handled in app. This is just a soft push.
-  };
+  const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Close modal and navigate when user logs in successfully
+  useEffect(() => {
+    if (user && isAuthModalOpen) {
+      setAuthModalOpen(false);
+      if (redirectPath) {
+        navigate(redirectPath);
+        setRedirectPath('');
+      } else {
+        navigate('/repositories');
+      }
+    }
+  }, [user, isAuthModalOpen, redirectPath, navigate, setAuthModalOpen, setRedirectPath]);
 
   if (!isAuthModalOpen) return null;
 
@@ -38,8 +51,10 @@ export default function AuthModal() {
     setNeedsVerification(false);
     setPendingEmail('');
     setVerificationCode('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
     setAuthModalOpen(false);
-    if (redirectPath) navigate(redirectPath);
   };
 
   const onLogin = async (e) => {
@@ -48,7 +63,7 @@ export default function AuthModal() {
     setError('');
     try {
       await loginWithEmail(email, password);
-      close();
+      // Modal will close automatically via useEffect when user state updates
     } catch (err) {
       setError(mapCognitoError(err));
     } finally {
@@ -66,10 +81,7 @@ export default function AuthModal() {
     setError('');
     try {
       const result = await signupWithEmail(email, password);
-      // If signup is complete and no verification needed, close modal
-      if (result && !result.needsVerification) {
-        close();
-      }
+      // If signup is complete and no verification needed, modal will close via useEffect
       // If verification is needed, the modal will stay open and show verification step
     } catch (err) {
       setError(mapCognitoError(err));

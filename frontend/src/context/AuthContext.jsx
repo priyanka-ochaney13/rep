@@ -20,6 +20,7 @@ export function AuthProvider({ children }) {
   const [redirectPath, setRedirectPath] = useState('');
   const [needsVerification, setNeedsVerification] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
   // Check if user is authenticated on mount
   useEffect(() => {
@@ -35,6 +36,7 @@ export function AuthProvider({ children }) {
         email: attributes.email,
         displayName: attributes.name || attributes.email?.split('@')[0],
       });
+      setHasCheckedAuth(true);
       
       // Test backend connection
       try {
@@ -45,6 +47,7 @@ export function AuthProvider({ children }) {
       }
     } catch (err) {
       setUser(null);
+      setHasCheckedAuth(true);
     } finally {
       setLoading(false);
     }
@@ -136,6 +139,7 @@ export function AuthProvider({ children }) {
     try {
       await signOut();
       setUser(null);
+      setHasCheckedAuth(true);
     } catch (err) {
       console.error('Error signing out:', err);
     }
@@ -156,12 +160,13 @@ export function AuthProvider({ children }) {
     setNeedsVerification,
     pendingEmail,
     setPendingEmail,
+    hasCheckedAuth,
     loginWithEmail,
     signupWithEmail,
     confirmSignupWithCode,
     resendVerificationCode,
     logout,
-  }), [user, loading, error, isAuthModalOpen, authModalTab, redirectPath, needsVerification, pendingEmail]);
+  }), [user, loading, error, isAuthModalOpen, authModalTab, redirectPath, needsVerification, pendingEmail, hasCheckedAuth]);
 
   return (
     <AuthContext.Provider value={value}>

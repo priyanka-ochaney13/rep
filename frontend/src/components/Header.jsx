@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './layout.css';
 import { useAuth } from '../context/AuthContext.jsx';
 import AuthModal from './AuthModal.jsx';
@@ -8,8 +8,35 @@ export function Header() {
   const { user, setAuthModalOpen } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
   const initial = (user?.displayName || user?.email || 'U')?.[0]?.toUpperCase() || 'U';
   const name = user?.displayName || user?.email || '';
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+      }
+    };
+
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [menuOpen]);
+
   return (
     <>
       <header className="rx-header">
@@ -21,7 +48,7 @@ export function Header() {
             {!user ? (
               <button className="btn-primary btn-sm" onClick={() => setAuthModalOpen(true)}>Login / Sign Up</button>
             ) : (
-              <div className="relative" style={{marginLeft:'1rem'}}>
+              <div className="relative" style={{marginLeft:'1rem'}} ref={menuRef}>
                 <button onClick={() => setMenuOpen((v) => !v)} className="user-pill">
                   <span className="user-avatar" aria-hidden>{initial}</span>
                   <span className="user-name">{name}</span>

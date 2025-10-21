@@ -5,6 +5,7 @@ requests
 python-jose[cryptography]
 requests
 boto3
+GitPython
 tree-sitter
 tree-sitter-python
 tree-sitter-java

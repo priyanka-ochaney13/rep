@@ -37,6 +37,16 @@ def commit_and_push_readme(state: DocGenState) -> DocGenState:
     
     if not repo_path or not os.path.exists(repo_path):
         logger.error("[COMMIT] Repository path not found")
+        state.commit_status = "error"
+        state.commit_message = "Repository path not found"
+        return state
+    
+    # Check if .git folder exists (actual git clone vs zip download)
+    git_path = os.path.join(repo_path, ".git")
+    if not os.path.exists(git_path):
+        logger.error("[COMMIT] Not a git repository - .git folder not found")
+        state.commit_status = "error"
+        state.commit_message = "Not a git repository. The code was downloaded as ZIP. This shouldn't happen - please report this issue."
         return state
     
     try:

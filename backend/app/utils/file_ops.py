@@ -2,8 +2,12 @@ import os
 import base64
 import zipfile
 import requests
+import logging
 from pathlib import Path
 from typing import List
+from git import Repo, GitCommandError
+
+logger = logging.getLogger(__name__)
 
 def _base_tmp_dir() -> str:
     # Place temp under project to avoid permission issues on Windows
@@ -54,6 +58,70 @@ def clone_github_repo(repo_url: str, repo_id: str, branch: str = "main") -> str:
         return extracted_path
     else:
         return temp_dir
+
+
+def git_clone_repo(repo_url: str, repo_id: str, branch: str = "main") -> str:
+    """
+    Actually clone a GitHub repository using git clone.
+    This preserves the .git folder so commits can be made.
+    
+    Args:
+        repo_url: The GitHub repository URL (e.g., https://github.com/user/repo)
+        repo_id: Unique identifier for this clone
+        branch: Branch to checkout (defaults to 'main')
+    
+    Returns:
+        Path to the cloned repository
+    """
+    temp_dir = os.path.join(_base_tmp_dir(), repo_id)
+    
+    # If directory already exists and has .git, assume it's cloned
+    if os.path.exists(temp_dir) and os.path.exists(os.path.join(temp_dir, ".git")):
+        logger.info(f"Repository already cloned at {temp_dir}, pulling latest changes...")
+        try:
+            repo = Repo(temp_dir)
+            origin = repo.remote(name='origin')
+            origin.pull()
+            logger.info("✓ Successfully pulled latest changes")
+            return temp_dir
+        except Exception as e:
+            logger.warning(f"Failed to pull updates: {e}. Will re-clone...")
+            # If pull fails, delete and re-clone
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    # Clone the repository
+    logger.info(f"Cloning repository from {repo_url} to {temp_dir}...")
+    
+    try:
+        # Clone with the specified branch
+        repo = Repo.clone_from(repo_url, temp_dir, branch=branch)
+        logger.info(f"✓ Successfully cloned repository (branch: {branch})")
+        return temp_dir
+    except GitCommandError as e:
+        # If specified branch fails, try main
+        if branch != "main":
+            logger.info(f"Branch '{branch}' not found, trying 'main'...")
+            try:
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                repo = Repo.clone_from(repo_url, temp_dir, branch="main")
+                logger.info("✓ Successfully cloned repository (branch: main)")
+                return temp_dir
+            except GitCommandError:
+                pass
+        
+        # If main fails, try master
+        logger.info("Trying 'master' branch...")
+        try:
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            repo = Repo.clone_from(repo_url, temp_dir, branch="master")
+            logger.info("✓ Successfully cloned repository (branch: master)")
+            return temp_dir
+        except GitCommandError as final_error:
+            logger.error(f"Failed to clone repository: {final_error}")
+            raise Exception(f"Failed to clone repository with branches: {branch}, main, master. Error: {str(final_error)}")
 
 def extract_zip_file(base64_data: str, dest_dir: str) -> str:
     base_temp_dir = os.path.join(_base_tmp_dir(), dest_dir)

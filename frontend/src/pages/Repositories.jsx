@@ -32,6 +32,8 @@ export default function RepositoriesPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [showModal]);
 
+  const hasNoRepos = repos.length === 0;
+
   return (
     <>
       <Header />
@@ -44,18 +46,52 @@ export default function RepositoriesPage() {
             </div>
             <button className="btn-primary shadow-float" onClick={() => setShowModal(true)}>+ Connect Repository</button>
           </div>
-          <div className="repos-search-wrapper">
-            <input
-              type="text"
-              placeholder="Search repositories..."
-              className="repos-search"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
-          </div>
-          <div className="repo-grid" aria-live="polite">
-            {filtered.map(repo => <RepoCard key={repo.id || (repo.owner+repo.name)} repo={repo} onRetry={() => retryGeneration(repo.id)} onViewDocs={() => navigate(`/docs/${repo.owner}/${repo.name}`)} />)}
-          </div>
+          
+          {hasNoRepos ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '4rem 2rem',
+              background: 'rgba(15, 23, 36, 0.5)',
+              borderRadius: '12px',
+              border: '1px dashed rgba(139, 148, 158, 0.3)',
+              marginTop: '2rem'
+            }}>
+              <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>📚</div>
+              <h2 style={{ color: '#d0d7e2', marginBottom: '0.5rem', fontSize: '1.5rem' }}>No Repositories Yet</h2>
+              <p style={{ color: '#8b949e', marginBottom: '1.5rem', maxWidth: '500px', margin: '0 auto 1.5rem' }}>
+                Get started by connecting your first GitHub repository. We'll automatically generate comprehensive documentation for you.
+              </p>
+              <button className="btn-primary" onClick={() => setShowModal(true)}>
+                + Connect Your First Repository
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="repos-search-wrapper">
+                <input
+                  type="text"
+                  placeholder="Search repositories..."
+                  className="repos-search"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                />
+              </div>
+              <div className="repo-grid" aria-live="polite">
+                {filtered.length > 0 ? (
+                  filtered.map(repo => <RepoCard key={repo.id || (repo.owner+repo.name)} repo={repo} onRetry={() => retryGeneration(repo.id)} onViewDocs={() => navigate(`/docs/${repo.owner}/${repo.name}`)} />)
+                ) : (
+                  <div style={{ 
+                    gridColumn: '1 / -1', 
+                    textAlign: 'center', 
+                    padding: '3rem', 
+                    color: '#8b949e' 
+                  }}>
+                    No repositories match your search.
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
         {showModal && <ConnectRepositoryModal onClose={() => setShowModal(false)} onSubmit={(d)=>{handleAddRepo(d); setShowModal(false);}} />}
       </main>

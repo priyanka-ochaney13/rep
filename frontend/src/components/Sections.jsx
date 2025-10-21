@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import '../App.css';
 
 export function StatsStrip({ stats }) {
@@ -58,13 +59,25 @@ export function FeaturesSection({ features }) {
 
 export function CTASection() {
   const navigate = useNavigate();
+  const { user, setAuthModalOpen, setAuthModalTab, setRedirectPath } = useAuth();
+
+  const handleGetStarted = () => {
+    if (!user) {
+      setAuthModalTab('login');
+      setRedirectPath('/repositories');
+      setAuthModalOpen(true);
+    } else {
+      navigate('/repositories');
+    }
+  };
+
   return (
     <section id="cta" className="section cta padded" aria-labelledby="cta-heading">
       <div className="section-inner cta-inner">
         <h2 id="cta-heading" className="section-title">Ready to Automate Your Docs?</h2>
         <p className="section-lead">Join thousands of developers who've already saved countless hours with RepoX</p>
         <div className="cta-row">
-          <button className="btn-primary" onClick={() => navigate('/repositories')}>Connect Your First Repo →</button>
+          <button className="btn-primary" onClick={handleGetStarted}>Connect Your First Repo →</button>
         </div>
       </div>
     </section>

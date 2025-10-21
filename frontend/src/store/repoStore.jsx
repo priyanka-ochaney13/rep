@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { generateDocs } from '../api/apiClient';
+import { useAuth } from '../context/AuthContext';
 
 // --- Types / Constants --------------------------------------------------
 // Status flow: Pending -> Processing -> Ready | Failed
@@ -48,7 +49,11 @@ const INITIAL_SEED = [
   }
 ];
 
-const STORAGE_KEY = 'repox.repos.v1';
+// Get storage key for specific user
+function getStorageKey(userEmail) {
+  if (!userEmail) return 'repox.repos.v1.guest';
+  return `repox.repos.v1.${userEmail}`;
+}
 
 function todayISO() { return new Date().toISOString().split('T')[0]; }
 
@@ -124,33 +129,45 @@ const RepoContext = createContext(null);
 
 export function RepoProvider({ children }) {
   const [repos, dispatch] = useReducer(repoReducer, []);
+  const { user } = useAuth();
+  const currentStorageKey = getStorageKey(user?.email);
 
-  // Load from localStorage once
+  // Load from localStorage when user changes or on mount
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(currentStorageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
+          console.log(`📂 Loaded ${parsed.length} repos for user:`, user?.email || 'guest');
           dispatch({ type: ACTIONS.LOAD, payload: parsed });
           return;
         }
       }
     } catch { /* ignore */ }
-    dispatch({ type: ACTIONS.LOAD, payload: INITIAL_SEED });
-  }, []);
+    
+    // For logged-in users, start with empty array (they add their own repos)
+    // For guests (not logged in), show sample data
+    if (user) {
+      console.log('📂 Starting with empty repos for new user:', user.email);
+      dispatch({ type: ACTIONS.LOAD, payload: [] });
+    } else {
+      console.log('📂 Loading sample data for guest user');
+      dispatch({ type: ACTIONS.LOAD, payload: INITIAL_SEED });
+    }
+  }, [user?.email, currentStorageKey]);
 
   // Persist anytime repos changes
   useEffect(() => {
-    if (repos.length > 0) {
-      console.log('💾 Saving to localStorage:', repos.length, 'repos');
+    if (repos.length >= 0) { // Allow saving even empty arrays
+      console.log('💾 Saving to localStorage:', repos.length, 'repos for', user?.email || 'guest');
       try { 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(repos)); 
+        localStorage.setItem(currentStorageKey, JSON.stringify(repos)); 
       } catch (err) { 
         console.error('❌ Failed to save to localStorage:', err);
       }
     }
-  }, [repos]);
+  }, [repos, currentStorageKey, user?.email]);
 
   // --- Actions ---------------------------------------------------------
 

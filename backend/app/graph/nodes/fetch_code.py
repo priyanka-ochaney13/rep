@@ -1,7 +1,7 @@
 import random
 import logging
 from app.models.state import DocGenState
-from app.utils.file_ops import clone_github_repo, extract_zip_file
+from app.utils.file_ops import clone_github_repo, extract_zip_file, git_clone_repo
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +18,22 @@ def fetch_code(state: DocGenState) -> DocGenState:
         # Accept 'github', 'repo', and 'url' as aliases for GitHub URL input
         if state.input_type in ("github", "repo", "url"):
             logger.info(f"[FETCH] Cloning GitHub repo: {state.input_data}")
-            if state.branch:
-                state.working_dir = {"repo_path": clone_github_repo(state.input_data, custom_clone_path, branch=state.branch)}
+            
+            # If user wants to commit to GitHub, use git clone (preserves .git folder)
+            # Otherwise use zip download (faster, no git credentials needed)
+            if state.preferences and state.preferences.commit_to_github:
+                logger.info("[FETCH] Using git clone (commit to GitHub enabled)")
+                if state.branch:
+                    state.working_dir = {"repo_path": git_clone_repo(state.input_data, custom_clone_path, branch=state.branch)}
+                else:
+                    state.working_dir = {"repo_path": git_clone_repo(state.input_data, custom_clone_path)}
             else:
-                state.working_dir = {"repo_path": clone_github_repo(state.input_data, custom_clone_path)}
+                logger.info("[FETCH] Using zip download (faster, no git operations)")
+                if state.branch:
+                    state.working_dir = {"repo_path": clone_github_repo(state.input_data, custom_clone_path, branch=state.branch)}
+                else:
+                    state.working_dir = {"repo_path": clone_github_repo(state.input_data, custom_clone_path)}
+            
             logger.info(f"[FETCH] ✓ Cloned successfully")
             
         elif state.input_type == "zip":
