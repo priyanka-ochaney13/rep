@@ -1,5 +1,10 @@
 from app.models.state import DocGenState
 from app.utils.mistral import get_llm_response_readme
+from app.prompts.diagram_prompts import (
+    SYSTEM_EXPLANATION_PROMPT,
+    SYSTEM_MAPPING_PROMPT,
+    SYSTEM_DIAGRAM_PROMPT
+)
 import re
 import random
 import time
@@ -25,6 +30,7 @@ def visualize_code_node(state: DocGenState) -> DocGenState:
     repo_data = state.parsed_data.get("repo_path", {})
     file_paths = sorted(repo_data.keys())
 
+    # Build file tree
     all_paths = set()
     for file_path in file_paths:
         parts = file_path.split("/")
@@ -34,49 +40,114 @@ def visualize_code_node(state: DocGenState) -> DocGenState:
         all_paths.add(file_path)
 
     folder_structure = "\n".join(sorted(all_paths))
-    print("folder_structure:\n", folder_structure)
+    readme_content = state.readme or "No README available"
 
-    prompt = f"""You are a precise and highly disciplined technical assistant.
+    print("🎨 Using GitDiagram-style 3-phase approach...")
+    
+    # Phase 1: Generate explanation
+    print("📝 Phase 1: Generating architecture explanation...")
+    explanation_prompt = f"""{SYSTEM_EXPLANATION_PROMPT}
 
-Your task: Generate a Mermaid.js diagram using the `graph TD` syntax that exactly matches the folder structure given below.
-
-Folder structure:
+<file_tree>
 {folder_structure}
+</file_tree>
 
-⚠️ Strict instructions:
-- Do NOT add any reasoning steps, thought process, or "thinking" blocks.
-- Do NOT invent or assume any extra folders or files.
-- Only include items explicitly present in the list.
-- Do NOT add any comments, explanation, or text before or after the diagram.
-- Output ONLY valid Mermaid code, starting with `graph TD`.
-- Use "Project_Root" as the root node label.
-- For each folder or file, use **only alphanumeric characters, underscores, dots, hyphens, or slashes as they appear in the given paths**.
-- Do NOT use reserved Mermaid keywords (e.g., `graph`, `subgraph`, `end`, `class`, etc.) as node names.
-- If a file or folder name could conflict with Mermaid keywords, wrap the label in square brackets like `[graph/]`.
-
-Format each node like this (example):
-graph TD
-    A[Project_Root] --> B[src/]
-    B --> C[main.py]
-    A --> D[README.md]
-
-Now generate the Mermaid diagram strictly and correctly based on the provided paths."""
+<readme>
+{readme_content}
+</readme>"""
 
     try:
-        raw_content = safe_llm_call(prompt)
+        explanation_response = safe_llm_call(explanation_prompt)
+        
+        # Extract explanation from tags
+        explanation_start = explanation_response.find("<explanation>")
+        explanation_end = explanation_response.find("</explanation>")
+        
+        if explanation_start != -1 and explanation_end != -1:
+            explanation = explanation_response[explanation_start + 13:explanation_end].strip()
+        else:
+            explanation = explanation_response.strip()
+        
+        print(f"✅ Phase 1 complete. Explanation length: {len(explanation)} chars")
+        
     except Exception as e:
-        print(f"Error generating Mermaid diagram: {e}")
-        return state
+        print(f"❌ Error in Phase 1: {e}")
+        explanation = "System architecture explanation not available"
+    
+    # Phase 2: Map components to files
+    print("�️  Phase 2: Mapping components to files...")
+    mapping_prompt = f"""{SYSTEM_MAPPING_PROMPT}
 
-    cleaned_content = re.sub(r"<think>.*?</think>", "", raw_content, flags=re.DOTALL).strip()
+<explanation>
+{explanation}
+</explanation>
 
-    mermaid_start = cleaned_content.find("graph TD")
-    if mermaid_start != -1:
-        mermaid_code = cleaned_content[mermaid_start:].strip()
-    else:
-        mermaid_code = cleaned_content
+<file_tree>
+{folder_structure}
+</file_tree>"""
 
-    mermaid_code = mermaid_code.replace("`", "")
+    try:
+        mapping_response = safe_llm_call(mapping_prompt)
+        
+        # Extract component mapping
+        mapping_start = mapping_response.find("<component_mapping>")
+        mapping_end = mapping_response.find("</component_mapping>")
+        
+        if mapping_start != -1 and mapping_end != -1:
+            component_mapping = mapping_response[mapping_start:mapping_end + 20]
+        else:
+            component_mapping = mapping_response.strip()
+        
+        print(f"✅ Phase 2 complete. Mapping length: {len(component_mapping)} chars")
+        
+    except Exception as e:
+        print(f"❌ Error in Phase 2: {e}")
+        component_mapping = "<component_mapping>\n</component_mapping>"
+    
+    # Phase 3: Generate Mermaid diagram
+    print("📊 Phase 3: Generating Mermaid diagram...")
+    diagram_prompt = f"""{SYSTEM_DIAGRAM_PROMPT}
+
+<explanation>
+{explanation}
+</explanation>
+
+{component_mapping}"""
+
+    try:
+        mermaid_response = safe_llm_call(diagram_prompt)
+        
+        # Clean up the response
+        mermaid_code = re.sub(r"<think>.*?</think>", "", mermaid_response, flags=re.DOTALL).strip()
+        
+        # Remove code fences if present
+        mermaid_code = mermaid_code.replace("```mermaid", "").replace("```", "").strip()
+        
+        # Find diagram start
+        patterns = ["flowchart TD", "flowchart LR", "flowchart TB", "graph TD", "graph LR"]
+        diagram_start = -1
+        
+        for pattern in patterns:
+            idx = mermaid_code.find(pattern)
+            if idx != -1:
+                diagram_start = idx
+                break
+        
+        if diagram_start != -1:
+            mermaid_code = mermaid_code[diagram_start:].strip()
+        
+        print(f"✅ Phase 3 complete. Diagram length: {len(mermaid_code)} chars")
+        print("🎉 Diagram generation complete!")
+        
+    except Exception as e:
+        print(f"❌ Error in Phase 3: {e}")
+        # Fallback to simple diagram
+        mermaid_code = f"""flowchart TD
+    Root["📦 {state.working_dir.split('/')[-1]}"]
+    Root --> Files["📄 Project Files"]
+    Files --> Note["See file tree for details"]
+    
+    classDef default fill:#6366f1,stroke:#4f46e5,color:#fff"""
 
     state.visuals = state.visuals or {}
     state.visuals["folder_structure_mermaid"] = mermaid_code
