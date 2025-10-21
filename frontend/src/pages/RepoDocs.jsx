@@ -136,7 +136,7 @@ export default function RepoDocsPage() {
             <p style={{opacity:.5, fontSize: '0.875rem', marginTop: '0.5rem'}}>
               Looking for: {owner}/{name}
             </p>
-            <Link to="/repositories" className="btn-primary" style={{display:'inline-block',marginTop:'1.25rem'}}>← Back</Link>
+            <Link to="/repositories" className="btn-primary" style={{display:'inline-block',marginTop:'1.25rem'}}>Back</Link>
           </div>
         </main>
         <Footer />
@@ -177,7 +177,7 @@ export default function RepoDocsPage() {
                   </button>
                 )}
                 <Link to="/repositories" className="btn-secondary small-btn">
-                  ← Back
+                  Back
                 </Link>
               </div>
             </div>
@@ -316,8 +316,8 @@ function ArchitectureTab({ repo, mermaid }) {
         </p>
       </div>
 
-      {/* Folder Structure */}
-      {folderTree && (
+      {/* Folder Structure - Hidden as it's redundant with diagrams */}
+      {/* {folderTree && (
         <div className="content-card">
           <h3 className="card-title">📁 Project Structure</h3>
           <div className="folder-tree">
@@ -333,7 +333,7 @@ function ArchitectureTab({ repo, mermaid }) {
             </pre>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Mermaid Diagrams */}
       {hasDiagrams ? (
@@ -377,66 +377,60 @@ function DiagramCard({ title, diagramText, diagramError, diagramKey, index }) {
 
   const handleExportPNG = async () => {
     setIsExporting(true);
+    console.log('🎨 Starting export...');
+    
     try {
-      // Wait a bit for any pending renders
+      // Wait for rendering to complete
       await new Promise(resolve => setTimeout(resolve, 500));
       
       const svgElement = containerRef.current?.querySelector('.mermaid svg');
+      console.log('📊 SVG Element:', svgElement);
+      
       if (!svgElement) {
+        console.error('❌ SVG not found');
         alert('❌ Diagram not found. Please wait for it to render completely.');
         setIsExporting(false);
         return;
       }
 
-      // Get actual SVG dimensions
-      const svgBBox = svgElement.getBBox();
-      const svgWidth = svgBBox.width || svgElement.clientWidth || 800;
-      const svgHeight = svgBBox.height || svgElement.clientHeight || 600;
+      // Clone the SVG to avoid modifying the original
+      const svgClone = svgElement.cloneNode(true);
       
-      // Create a clean container for export
-      const exportContainer = document.createElement('div');
-      exportContainer.style.position = 'absolute';
-      exportContainer.style.left = '-9999px';
-      exportContainer.style.top = '0';
-      exportContainer.style.width = `${svgWidth + 80}px`;
-      exportContainer.style.height = `${svgHeight + 80}px`;
-      exportContainer.style.padding = '40px';
-      exportContainer.style.background = '#0b1625';
-      exportContainer.style.display = 'flex';
-      exportContainer.style.alignItems = 'center';
-      exportContainer.style.justifyContent = 'center';
-      document.body.appendChild(exportContainer);
+      // Add white background to the SVG
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('width', '100%');
+      rect.setAttribute('height', '100%');
+      rect.setAttribute('fill', '#0b1625');
+      svgClone.insertBefore(rect, svgClone.firstChild);
       
-      // Clone SVG with all styles
-      const clonedSvg = svgElement.cloneNode(true);
-      clonedSvg.setAttribute('width', svgWidth);
-      clonedSvg.setAttribute('height', svgHeight);
-      exportContainer.appendChild(clonedSvg);
+      // Ensure SVG has proper dimensions
+      const bbox = svgElement.getBBox();
+      const padding = 40;
+      svgClone.setAttribute('width', bbox.width + padding * 2);
+      svgClone.setAttribute('height', bbox.height + padding * 2);
+      svgClone.setAttribute('viewBox', `${bbox.x - padding} ${bbox.y - padding} ${bbox.width + padding * 2} ${bbox.height + padding * 2}`);
       
-      // Export to PNG
-      const dataUrl = await toPng(exportContainer, {
-        backgroundColor: '#0b1625',
-        quality: 1.0,
-        pixelRatio: 2,
-        width: svgWidth + 80,
-        height: svgHeight + 80,
-        cacheBust: true
-      });
+      // Serialize SVG to string
+      const svgData = new XMLSerializer().serializeToString(svgClone);
       
-      // Cleanup
-      document.body.removeChild(exportContainer);
+      // Create blob and download
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
       
-      // Download
       const link = document.createElement('a');
-      link.download = `${diagramKey}-architecture-diagram.png`;
-      link.href = dataUrl;
+      link.download = `${diagramKey || 'diagram'}-architecture.svg`;
+      link.href = url;
       link.click();
       
-      console.log('✅ Diagram exported successfully');
+      // Cleanup
+      URL.revokeObjectURL(url);
+      
+      console.log('✅ Diagram exported as SVG');
+      setIsExporting(false);
+      
     } catch (err) {
       console.error('❌ Export error:', err);
       alert('Failed to export diagram. Error: ' + err.message);
-    } finally {
       setIsExporting(false);
     }
   };
@@ -461,17 +455,17 @@ function DiagramCard({ title, diagramText, diagramError, diagramKey, index }) {
         <h3 className="card-title">{title}</h3>
         <div className="diagram-controls">
           <button 
-            className="control-btn customize-btn" 
-            onClick={() => setShowCustomizeModal(true)}
-            title="Customize Diagram"
+            className="control-btn" 
+            onClick={handleViewInNewTab}
+            title="Open in New Tab"
           >
-            ⚙️ Customize
+            Open in New Tab
           </button>
           <button 
             className="control-btn export-btn" 
             onClick={handleExportPNG}
             disabled={isExporting}
-            title="Export as PNG"
+            title="Export as JPEG"
           >
             {isExporting ? '⏳' : '📥'} Export
           </button>
@@ -481,7 +475,7 @@ function DiagramCard({ title, diagramText, diagramError, diagramKey, index }) {
               checked={enableZoom} 
               onChange={(e) => setEnableZoom(e.target.checked)}
             />
-            <span>🔍 Zoom</span>
+            <span>Zoom</span>
           </label>
         </div>
       </div>
@@ -574,14 +568,14 @@ function DiagramCard({ title, diagramText, diagramError, diagramKey, index }) {
                     onClick={() => zoomIn(0.3)}
                     title="Zoom In"
                   >
-                    🔍+
+                    +
                   </button>
                   <button 
                     className="zoom-control-btn" 
                     onClick={() => zoomOut(0.3)}
                     title="Zoom Out"
                   >
-                    🔍−
+                    −
                   </button>
                   <button 
                     className="zoom-control-btn" 
@@ -628,10 +622,6 @@ function DiagramCard({ title, diagramText, diagramError, diagramKey, index }) {
           </pre>
         </div>
       )}
-      
-      <div className="diagram-hints">
-        <span>💡 {enableZoom ? 'Mouse wheel to zoom • Drag to pan • Double-click to zoom in' : 'Enable zoom to interact with diagram'}</span>
-      </div>
     </div>
   );
 }
