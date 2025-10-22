@@ -25,4 +25,4 @@ build/
 dist/
 *.egg-info/
 
-DYNAMODB_SETUP.MD
+DYNAMODB_SETUP.md

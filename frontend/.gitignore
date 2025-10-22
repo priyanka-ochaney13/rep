@@ -32,4 +32,4 @@ dist-ssr
 
 .env.local
 
-DYNAMODB_SETUP.MD
+DYNAMODB_SETUP.md
