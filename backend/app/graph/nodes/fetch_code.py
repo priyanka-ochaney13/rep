@@ -1,7 +1,9 @@
 import random
 import logging
+import shutil
 from app.models.state import DocGenState
 from app.utils.file_ops import clone_github_repo, extract_zip_file, git_clone_repo
+from app.utils.github_api import fetch_repo_without_clone
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +19,10 @@ def fetch_code(state: DocGenState) -> DocGenState:
 
         # Accept 'github', 'repo', and 'url' as aliases for GitHub URL input
         if state.input_type in ("github", "repo", "url"):
-            logger.info(f"[FETCH] Cloning GitHub repo: {state.input_data}")
+            logger.info(f"[FETCH] Fetching GitHub repo: {state.input_data}")
             
             # If user wants to commit to GitHub, use git clone (preserves .git folder)
-            # Otherwise use zip download (faster, no git credentials needed)
+            # Otherwise use GitHub API (no local storage, faster)
             if state.preferences and state.preferences.commit_to_github:
                 logger.info("[FETCH] Using git clone (commit to GitHub enabled)")
                 if state.branch:
@@ -28,13 +30,14 @@ def fetch_code(state: DocGenState) -> DocGenState:
                 else:
                     state.working_dir = {"repo_path": git_clone_repo(state.input_data, custom_clone_path)}
             else:
-                logger.info("[FETCH] Using zip download (faster, no git operations)")
-                if state.branch:
-                    state.working_dir = {"repo_path": clone_github_repo(state.input_data, custom_clone_path, branch=state.branch)}
-                else:
-                    state.working_dir = {"repo_path": clone_github_repo(state.input_data, custom_clone_path)}
+                logger.info("[FETCH] Using GitHub API (no local storage, no git operations)")
+                # Use GitHub API to fetch without cloning
+                branch = state.branch if state.branch else "main"
+                temp_path = fetch_repo_without_clone(state.input_data, branch=branch)
+                state.working_dir = {"repo_path": temp_path}
+                state.temp_dir_cleanup = temp_path  # Mark for cleanup
             
-            logger.info(f"[FETCH] ✓ Cloned successfully")
+            logger.info(f"[FETCH] ✓ Fetched successfully")
             
         elif state.input_type == "zip":
             logger.info("[FETCH] Extracting ZIP file")

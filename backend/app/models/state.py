@@ -24,3 +24,4 @@ class DocGenState(BaseModel):
     commit_status: Optional[str] = None
     commit_message: Optional[str] = None
     project_analysis: Optional[Dict[str, Any]] = None  # Project structure and detailed analysis
+    temp_dir_cleanup: Optional[str] = None  # Temporary directory to cleanup after processing
