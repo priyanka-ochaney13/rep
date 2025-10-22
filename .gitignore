@@ -61,6 +61,7 @@ build/
 *.pem
 *.p12
 .env
+secrets.txt
 
 # --- OneDrive noise (since workspace is in OneDrive) ---
 ~$*
