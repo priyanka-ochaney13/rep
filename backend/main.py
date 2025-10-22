@@ -6,6 +6,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.graph.graph import run_pipeline
 from app.models.state import DocGenState, DocGenPreferences
 from app.utils.cognito_auth import verify_cognito_token, get_user_info_from_token
+from app.utils.dynamodb import (
+    save_user_preferences, get_user_preferences,
+    save_documentation_record, get_user_documentation_history,
+    get_documentation_by_id, delete_documentation_record,
+    test_connection
+)
 from fastapi.responses import StreamingResponse
 import io, os
 import zipfile
@@ -401,6 +407,135 @@ async def signin_user(
                 detail=f"Sign in failed: {error_code} - {error_message}"
             )
 
+
+# ==================== DYNAMODB ENDPOINTS ====================
+
+@app.get("/db/test")
+async def test_dynamodb_connection(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Test DynamoDB connection (requires authentication).
+    
+    Returns:
+        Dict with connection status
+    """
+    result = test_connection()
+    return result
+
+
+@app.post("/user/preferences")
+async def save_preferences(
+    preferences: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Save user preferences to DynamoDB.
+    
+    Args:
+        preferences: User preferences dict
+        current_user: Authenticated user from JWT
+        
+    Returns:
+        Dict with save status
+    """
+    user_id = current_user.get('sub')
+    result = save_user_preferences(user_id, preferences)
+    return result
+
+
+@app.get("/user/preferences")
+async def get_preferences(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Get user preferences from DynamoDB.
+    
+    Args:
+        current_user: Authenticated user from JWT
+        
+    Returns:
+        Dict containing user preferences
+    """
+    user_id = current_user.get('sub')
+    preferences = get_user_preferences(user_id)
+    
+    if preferences is None:
+        # Return default preferences if none exist
+        return {
+            "theme": "light",
+            "notifications": True,
+            "auto_commit": False
+        }
+    
+    return preferences
+
+
+@app.get("/user/history")
+async def get_history(
+    limit: int = 10,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get user's documentation generation history.
+    
+    Args:
+        limit: Maximum number of records to return
+        current_user: Authenticated user from JWT
+        
+    Returns:
+        List of documentation records
+    """
+    user_id = current_user.get('sub')
+    history = get_user_documentation_history(user_id, limit)
+    return {"history": history}
+
+
+@app.get("/user/documentation/{record_id}")
+async def get_documentation(
+    record_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get a specific documentation record by ID.
+    
+    Args:
+        record_id: Documentation record ID
+        current_user: Authenticated user from JWT
+        
+    Returns:
+        Documentation record
+    """
+    user_id = current_user.get('sub')
+    record = get_documentation_by_id(user_id, record_id)
+    
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Documentation record not found"
+        )
+    
+    return record
+
+
+@app.delete("/user/documentation/{record_id}")
+async def delete_documentation(
+    record_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Delete a documentation record.
+    
+    Args:
+        record_id: Documentation record ID to delete
+        current_user: Authenticated user from JWT
+        
+    Returns:
+        Dict with deletion status
+    """
+    user_id = current_user.get('sub')
+    result = delete_documentation_record(user_id, record_id)
+    return result
+
+
+# ==================== MODIFIED GENERATE ENDPOINT ====================
+
 @app.post("/generate")
 async def generate_docs(
     input_type: str = Form(...),
@@ -437,6 +572,33 @@ async def generate_docs(
     logger.info(f"Summaries count: {len(result.get('summaries', {})) if result.get('summaries') else 0} files")
     logger.info(f"Summaries keys: {list(result.get('summaries', {}).keys()) if result.get('summaries') else []}")
     logger.info("=" * 60)
+
+    # Save documentation to DynamoDB
+    try:
+        user_id = current_user.get('sub')
+        repo_identifier = input_data if input_type == "url" else "zip_upload"
+        
+        metadata = {
+            "visuals": result.get("visuals"),
+            "folder_tree": result.get("folder_tree"),
+            "input_type": result.get("input_type"),
+            "commit_status": result.get("commit_status"),
+            "commit_message": result.get("commit_message"),
+            "project_analysis": result.get("project_analysis")
+        }
+        
+        save_result = save_documentation_record(
+            user_id=user_id,
+            repo_url=repo_identifier,
+            readme_content=result.get("readme", ""),
+            summaries=result.get("summaries", {}),
+            metadata=metadata
+        )
+        
+        logger.info(f"DynamoDB save result: {save_result}")
+        
+    except Exception as e:
+        logger.warning(f"Failed to save to DynamoDB (non-critical): {str(e)}")
 
     return {
         "readme": result.get("readme"),

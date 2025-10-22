@@ -1,125 +1,91 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { generateDocs } from '../api/apiClient';
-import { useAuth } from '../context/AuthContext';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useState } from 'react';
+import { getUserHistory, generateDocs, deleteDocumentation } from '../api/apiClient.js';
 
 // --- Types / Constants --------------------------------------------------
 // Status flow: Pending -> Processing -> Ready | Failed
 
-const INITIAL_SEED = [
-  {
-    id: 'seed-dsa-prac',
-    name: 'DSA-prac',
-    owner: 'priyanka-ochaney13',
-    description: 'Practice data structures & algorithms.',
-    stars: 0,
-    lang: 'JavaScript',
-    status: 'Ready',
-    updatedAt: '2025-10-04',
-    docs: {
-      readme: '# DSA-prac\n\nThis repository contains data structure & algorithm practice solutions.\n',
-      summary: 'Includes solutions for arrays, graphs, trees, and more.',
-      changelog: [
-        { date: '2025-10-04', entry: 'Added new graph algorithms.' },
-        { date: '2025-09-20', entry: 'Refactored tree traversal utilities.' },
-        { date: '2025-09-01', entry: 'Initial auto-generated docs.' }
-      ]
-    }
-  },
-  {
-    id: 'seed-repox',
-    name: 'repox',
-    owner: 'priyanka-ochaney13',
-    description: 'RepoX core service.',
-    stars: 0,
-    lang: 'TypeScript',
-    status: 'Ready',
-    updatedAt: '2025-10-04',
-    docs: { readme: '# RepoX\nCore service powering automated documentation.\n', summary: 'Core logic & automation pipeline.', changelog: [] }
-  },
-  {
-    id: 'seed-api-gateway',
-    name: 'api-gateway',
-    owner: 'acme',
-    description: 'Scalable API gateway with rate limiting and authentication',
-    stars: 156,
-    lang: 'Go',
-    status: 'Ready',
-    updatedAt: '2024-01-14',
-    docs: { readme: '# API Gateway\nHigh-performance gateway written in Go.\n', summary: 'Gateway modules & middleware overview.', changelog: [] }
-  }
-];
-
-// Get storage key for specific user
-function getStorageKey(userEmail) {
-  if (!userEmail) return 'repox.repos.v1.guest';
-  return `repox.repos.v1.${userEmail}`;
-}
-
 function todayISO() { return new Date().toISOString().split('T')[0]; }
 
-// Helper function to detect languages from file summaries
-function detectLanguagesFromSummaries(summaries) {
-  if (!summaries || typeof summaries !== 'object') return 'Unknown';
+/**
+ * Transform DynamoDB documentation record to frontend repo format
+ */
+function transformDynamoDBRecordToRepo(record) {
+  // Extract repo name and owner from URL
+  let name = 'Unknown';
+  let owner = 'Unknown';
   
-  const languageCount = {};
-  const extensionMap = {
-    '.py': 'Python',
-    '.js': 'JavaScript',
-    '.jsx': 'JavaScript',
-    '.ts': 'TypeScript',
-    '.tsx': 'TypeScript',
-    '.java': 'Java',
-    '.cpp': 'C++',
-    '.c': 'C',
-    '.go': 'Go',
-    '.rs': 'Rust',
-    '.rb': 'Ruby',
-    '.php': 'PHP',
-    '.swift': 'Swift',
-    '.kt': 'Kotlin',
-    '.cs': 'C#',
-    '.html': 'HTML',
-    '.css': 'CSS',
-    '.scss': 'SCSS',
-  };
-  
-  // Count files by extension
-  Object.keys(summaries).forEach(filename => {
-    const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
-    const lang = extensionMap[ext];
-    if (lang) {
-      languageCount[lang] = (languageCount[lang] || 0) + 1;
+  if (record.repoUrl) {
+    if (record.repoUrl.includes('github.com')) {
+      try {
+        const match = record.repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+        if (match) {
+          owner = match[1];
+          name = match[2];
+        }
+      } catch (e) {
+        console.warn('Failed to parse repo URL:', e);
+      }
+    } else if (record.repoUrl.includes('zip_upload')) {
+      name = 'Zip Upload';
+      owner = 'local';
     }
-  });
+  }
   
-  // Get languages sorted by count
-  const sortedLangs = Object.entries(languageCount)
-    .sort(([,a], [,b]) => b - a)
-    .map(([lang]) => lang);
+  // Get metadata
+  const metadata = record.metadata || {};
   
-  // Return top 2-3 languages
-  if (sortedLangs.length === 0) return 'Unknown';
-  if (sortedLangs.length === 1) return sortedLangs[0];
-  if (sortedLangs.length === 2) return sortedLangs.join(', ');
-  return sortedLangs.slice(0, 2).join(', ') + ' +' + (sortedLangs.length - 2);
+  return {
+    id: record.recordId,
+    name: name,
+    owner: owner,
+    description: '', // Could extract from README later
+    stars: 0,
+    lang: metadata.input_type === 'url' ? 'Unknown' : 'Mixed',
+    status: 'Ready', // All DynamoDB records are completed
+    updatedAt: record.createdAt ? new Date(record.createdAt).toISOString().split('T')[0] : todayISO(),
+    docs: {
+      readme: record.readmeContent || '',
+      summary: record.summaries || {},
+      changelog: [],
+      visuals: metadata.visuals || {},
+      folderTree: metadata.folder_tree || '',
+      projectAnalysis: metadata.project_analysis || {}
+    },
+    commitStatus: metadata.commit_status,
+    commitMessage: metadata.commit_message
+  };
 }
-
-// --- Reducer ------------------------------------------------------------
 
 const ACTIONS = {
   LOAD: 'LOAD',
   ADD: 'ADD',
-  UPDATE: 'UPDATE'
+  UPDATE: 'UPDATE',
+  DELETE: 'DELETE',
+  SET_LOADING: 'SET_LOADING',
+  SET_ERROR: 'SET_ERROR'
 };
 
 function repoReducer(state, action) {
   switch (action.type) {
+    case ACTIONS.SET_LOADING:
+      return { ...state, loading: action.payload };
+    case ACTIONS.SET_ERROR:
+      return { ...state, error: action.payload };
     case ACTIONS.LOAD:
-      return action.payload;
+      return { ...state, repos: action.payload, loading: false, error: null };
     case ACTIONS.ADD:
-      return [action.payload, ...state];
+      return { ...state, repos: [action.payload, ...state.repos] };
     case ACTIONS.UPDATE:
-      return state.map(r => r.id === action.id ? { ...r, ...action.patch, docs: { ...r.docs, ...(action.patch.docs || {}) } } : r);
+      return { 
+        ...state, 
+        repos: state.repos.map(r => 
+          r.id === action.id 
+            ? { ...r, ...action.patch, docs: { ...r.docs, ...(action.patch.docs || {}) } } 
+            : r
+        ) 
+      };
+    case ACTIONS.DELETE:
+      return { ...state, repos: state.repos.filter(r => r.id !== action.id) };
     default:
       return state;
   }
@@ -128,120 +94,79 @@ function repoReducer(state, action) {
 const RepoContext = createContext(null);
 
 export function RepoProvider({ children }) {
-  const [repos, dispatch] = useReducer(repoReducer, []);
-  const { user } = useAuth();
-  const currentStorageKey = getStorageKey(user?.email);
+  const [state, dispatch] = useReducer(repoReducer, { 
+    repos: [], 
+    loading: true, 
+    error: null 
+  });
 
-  // Load from localStorage when user changes or on mount
-  useEffect(() => {
+  const fetchReposFromDynamoDB = useCallback(async () => {
     try {
-      const raw = localStorage.getItem(currentStorageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          console.log(`📂 Loaded ${parsed.length} repos for user:`, user?.email || 'guest');
-          dispatch({ type: ACTIONS.LOAD, payload: parsed });
-          return;
-        }
-      }
-    } catch { /* ignore */ }
-    
-    // For logged-in users, start with empty array (they add their own repos)
-    // For guests (not logged in), show sample data
-    if (user) {
-      console.log('📂 Starting with empty repos for new user:', user.email);
-      dispatch({ type: ACTIONS.LOAD, payload: [] });
-    } else {
-      console.log('📂 Loading sample data for guest user');
-      dispatch({ type: ACTIONS.LOAD, payload: INITIAL_SEED });
+      dispatch({ type: ACTIONS.SET_LOADING, payload: true });
+      dispatch({ type: ACTIONS.SET_ERROR, payload: null });
+      
+      console.log('🔄 Fetching repositories from DynamoDB...');
+      
+      // Fetch all documentation records from DynamoDB
+      const history = await getUserHistory(100); // Get up to 100 records
+      
+      console.log(`✅ Fetched ${history.length} records from DynamoDB`);
+      
+      // Transform DynamoDB records to repo format
+      const repos = history.map(record => transformDynamoDBRecordToRepo(record));
+      
+      dispatch({ type: ACTIONS.LOAD, payload: repos });
+      
+      console.log(`✅ Loaded ${repos.length} repositories`);
+      
+    } catch (error) {
+      console.error('❌ Failed to fetch repositories from DynamoDB:', error);
+      dispatch({ type: ACTIONS.SET_ERROR, payload: 'Failed to load repositories. Please try again.' });
+      dispatch({ type: ACTIONS.LOAD, payload: [] }); // Load empty array on error
     }
-  }, [user?.email, currentStorageKey]);
+  }, []);
 
-  // Persist anytime repos changes
+  // Fetch repos from DynamoDB on mount
   useEffect(() => {
-    if (repos.length >= 0) { // Allow saving even empty arrays
-      console.log('💾 Saving to localStorage:', repos.length, 'repos for', user?.email || 'guest');
-      try { 
-        localStorage.setItem(currentStorageKey, JSON.stringify(repos)); 
-      } catch (err) { 
-        console.error('❌ Failed to save to localStorage:', err);
-      }
-    }
-  }, [repos, currentStorageKey, user?.email]);
+    fetchReposFromDynamoDB();
+  }, [fetchReposFromDynamoDB]);
 
   // --- Actions ---------------------------------------------------------
 
-  const updateRepo = React.useCallback((id, patch) => {
+  const updateRepo = useCallback((id, patch) => {
     dispatch({ type: ACTIONS.UPDATE, id, patch });
   }, []);
 
-  const simulateGeneration = React.useCallback(async (id, githubUrl, owner, name, commitToGithub = false) => {
-    updateRepo(id, { status: 'Processing' });
-    
+  const deleteRepo = useCallback(async (id) => {
     try {
-      // Call the backend API to generate documentation
-      const result = await generateDocs({
-        inputType: 'url',
-        inputData: githubUrl,
-        branch: 'main',
-        commitToGithub: commitToGithub
-      });
+      console.log('🗑️ Deleting repo from DynamoDB:', id);
       
-      console.log('✅ Documentation generated successfully:', result);
-      console.log('📊 README length:', result.readme?.length || 0);
-      console.log('📊 Summaries:', result.summaries);
-      console.log('📊 Summaries count:', Object.keys(result.summaries || {}).length);
+      // Delete from DynamoDB
+      const result = await deleteDocumentation(id);
       
-      // Detect languages from the code summaries
-      const detectedLanguages = detectLanguagesFromSummaries(result.summaries);
-      console.log('🔍 Detected languages:', detectedLanguages);
+      console.log('✅ DynamoDB delete result:', result);
       
-      // Update repo with the generated documentation
-      const updatedDocs = {
-        status: 'Ready',
-        lang: detectedLanguages, // Update with detected languages
-        docs: {
-          readme: result.readme || '',
-          summary: result.summaries || 'Automated summary generated on ' + new Date().toLocaleString(),
-          changelog: [{ date: todayISO(), entry: 'Initial auto-generated docs.' }],
-          visuals: result.visuals || null,
-          folderTree: result.folder_tree || null,
-          projectAnalysis: result.project_analysis || null, // Add project analysis
-        },
-        commitStatus: result.commit_status,
-        commitMessage: result.commit_message,
-      };
+      // Check if delete was successful
+      if (result.status === 'error') {
+        throw new Error(result.message || 'Failed to delete from DynamoDB');
+      }
       
-      console.log('💾 Saving docs to store:', updatedDocs.docs);
+      // Remove from local state immediately
+      dispatch({ type: ACTIONS.DELETE, id });
       
-      updateRepo(id, updatedDocs);
+      console.log('✅ Removed from local state');
       
-      // Wait a bit to ensure localStorage is updated before navigating
-      setTimeout(() => {
-        console.log('📍 Navigating to docs page...');
-        window.location.href = `/docs/${owner}/${name}`;
-      }, 500);
+      // Don't refetch immediately - let the user manually refresh if needed
+      // This avoids race conditions with DynamoDB eventual consistency
+      
     } catch (error) {
-      console.error('❌ Generation failed:', error);
-      updateRepo(id, { status: 'Failed' });
+      console.error('❌ Failed to delete from DynamoDB:', error);
+      console.error('Error details:', error.message, error.stack);
+      throw error; // Let the UI handle the error
     }
-  }, [updateRepo]);
+  }, []);
 
-  const fetchGitHubMeta = React.useCallback(async (id, owner, name) => {
-    try {
-      const res = await fetch(`https://api.github.com/repos/${owner}/${name}`);
-      if (!res.ok) return; // rate limit or not found
-      const json = await res.json();
-      updateRepo(id, {
-        stars: json.stargazers_count || 0,
-        lang: json.language || 'Unknown',
-        description: json.description || '',
-        updatedAt: json.updated_at ? json.updated_at.split('T')[0] : todayISO()
-      });
-    } catch { /* ignore network errors */ }
-  }, [updateRepo]);
-
-  const connectRepo = React.useCallback(async (githubUrl, manual = {}) => {
+  const connectRepo = useCallback(async (githubUrl, manual = {}) => {
     let owner, name;
     try {
       const u = new URL(githubUrl);
@@ -252,44 +177,77 @@ export function RepoProvider({ children }) {
     } catch {
       return { error: 'Invalid GitHub URL' };
     }
-    const id = `${owner}-${name}-${Date.now()}`;
+    
+    // Create temporary ID
+    const tempId = `temp-${owner}-${name}-${Date.now()}`;
+    
+    // Add as "Processing" immediately for UI feedback
     const newRepo = {
-      id,
+      id: tempId,
       name,
       owner,
       description: manual.description || '',
-      stars: 0, // Will be fetched from GitHub API
-      lang: 'Detecting...', // Will be updated from GitHub API or parsed data
-      status: 'Pending',
+      stars: 0,
+      lang: 'Unknown',
+      status: 'Processing',
       updatedAt: todayISO(),
       docs: {
-        readme: `# ${name}\n\nAuto-generated placeholder README.\n`,
-        summary: '',
+        readme: '',
+        summary: {},
         changelog: []
       }
     };
+    
     dispatch({ type: ACTIONS.ADD, payload: newRepo });
-    // Kick off async tasks
-    simulateGeneration(id, githubUrl, owner, name, manual.commitToGithub || false);
-    fetchGitHubMeta(id, owner, name);
-    return { id };
-  }, [simulateGeneration, fetchGitHubMeta]);
+    
+    try {
+      // Call backend to generate docs - it will save to DynamoDB
+      console.log('🚀 Generating documentation...');
+      await generateDocs({
+        inputType: 'url',
+        inputData: githubUrl,
+        branch: 'main',
+        commitToGithub: manual.commitToGithub || false
+      });
+      
+      console.log('✅ Documentation generated successfully');
+      
+      // Refresh from DynamoDB to get the new record with real ID
+      await fetchReposFromDynamoDB();
+      
+      return { id: tempId };
+    } catch (error) {
+      console.error('❌ Failed to generate documentation:', error);
+      
+      // Update status to Failed
+      updateRepo(tempId, { status: 'Failed' });
+      
+      return { error: error.message || 'Failed to generate documentation' };
+    }
+  }, [fetchReposFromDynamoDB, updateRepo]);
 
-  const retryGeneration = React.useCallback((id) => {
-    const repo = repos.find(r => r.id === id);
+  const retryGeneration = useCallback(async (id) => {
+    // Find the repo
+    const repo = state.repos.find(r => r.id === id);
     if (!repo) return;
     
+    // Update status to Processing
+    updateRepo(id, { status: 'Processing' });
+    
+    // Retry generation
     const githubUrl = `https://github.com/${repo.owner}/${repo.name}`;
-    updateRepo(id, { status: 'Pending' });
-    // Retry without commit to GitHub by default (user can reconnect if they want to commit)
-    simulateGeneration(id, githubUrl, repo.owner, repo.name, false);
-  }, [simulateGeneration, updateRepo, repos]);
+    await connectRepo(githubUrl, { commitToGithub: false });
+  }, [state.repos, updateRepo, connectRepo]);
 
   const value = {
-    repos,
+    repos: state.repos,
+    loading: state.loading,
+    error: state.error,
     connectRepo,
     updateRepo,
-    retryGeneration
+    retryGeneration,
+    deleteRepo,
+    refreshRepos: fetchReposFromDynamoDB
   };
 
   return <RepoContext.Provider value={value}>{children}</RepoContext.Provider>;

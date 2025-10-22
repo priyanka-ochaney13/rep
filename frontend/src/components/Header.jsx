@@ -80,7 +80,6 @@ function UserMenu({ onClose, navigate }) {
   return (
     <div className="user-menu">
       <button onClick={handleProfile} className="user-menu-item">Profile</button>
-      <button onClick={() => { navigate('/repositories'); onClose?.(); }} className="user-menu-item">Repositories</button>
       <button onClick={handleLogout} className="user-menu-item">Logout</button>
     </div>
   );

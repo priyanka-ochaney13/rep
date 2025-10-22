@@ -10,7 +10,7 @@ import '../App.css';
 export default function RepositoriesPage() {
   const [query, setQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const { repos, connectRepo, retryGeneration } = useRepos();
+  const { repos, loading, error, connectRepo, retryGeneration, deleteRepo, refreshRepos } = useRepos();
   const navigate = useNavigate();
 
   const filtered = useMemo(() => {
@@ -34,6 +34,36 @@ export default function RepositoriesPage() {
 
   const hasNoRepos = repos.length === 0;
 
+  // Show loading state
+  if (loading) {
+    return (
+      <>
+        <Header />
+        <main className="repos-page" style={{paddingBottom: '3rem'}}>
+          <div className="repos-container">
+            <div style={{
+              textAlign: 'center',
+              padding: '4rem 2rem',
+              color: '#8b949e'
+            }}>
+              <div style={{ 
+                width: '48px', 
+                height: '48px', 
+                border: '4px solid rgba(99, 102, 241, 0.2)', 
+                borderTopColor: '#6366f1', 
+                borderRadius: '50%', 
+                animation: 'spin 0.8s linear infinite',
+                margin: '0 auto 1rem'
+              }} />
+              <p>Loading your repositories from cloud storage...</p>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
   return (
     <>
       <Header />
@@ -42,10 +72,43 @@ export default function RepositoriesPage() {
           <div className="repos-head">
             <div>
               <h1 className="repos-title">Your Repositories</h1>
-              <p className="repos-sub">Manage and monitor your connected GitHub repositories</p>
+              <p className="repos-sub">Manage and monitor your connected GitHub repositories (synced from DynamoDB)</p>
             </div>
-            <button className="btn-primary shadow-float" onClick={() => setShowModal(true)}>+ Connect Repository</button>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button className="btn-secondary" onClick={refreshRepos} title="Refresh from cloud">
+                🔄 Refresh
+              </button>
+              <button className="btn-primary shadow-float" onClick={() => setShowModal(true)}>+ Connect Repository</button>
+            </div>
           </div>
+
+          {/* Error Banner */}
+          {error && (
+            <div style={{
+              padding: '1rem 1.5rem',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: '8px',
+              color: '#fca5a5',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+              <span style={{ flex: 1 }}>{error}</span>
+              <button onClick={refreshRepos} style={{
+                padding: '0.5rem 1rem',
+                background: 'rgba(239, 68, 68, 0.2)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                borderRadius: '6px',
+                color: '#fca5a5',
+                cursor: 'pointer'
+              }}>
+                Try Again
+              </button>
+            </div>
+          )}
           
           {hasNoRepos ? (
             <div style={{
@@ -78,7 +141,7 @@ export default function RepositoriesPage() {
               </div>
               <div className="repo-grid" aria-live="polite">
                 {filtered.length > 0 ? (
-                  filtered.map(repo => <RepoCard key={repo.id || (repo.owner+repo.name)} repo={repo} onRetry={() => retryGeneration(repo.id)} onViewDocs={() => navigate(`/docs/${repo.owner}/${repo.name}`)} />)
+                  filtered.map(repo => <RepoCard key={repo.id || (repo.owner+repo.name)} repo={repo} onRetry={() => retryGeneration(repo.id)} onViewDocs={() => navigate(`/docs/${repo.owner}/${repo.name}`)} onDelete={async () => await deleteRepo(repo.id)} />)
                 ) : (
                   <div style={{ 
                     gridColumn: '1 / -1', 
@@ -100,7 +163,22 @@ export default function RepositoriesPage() {
   );
 }
 
-function RepoCard({ repo, onViewDocs, onRetry }) {
+function RepoCard({ repo, onViewDocs, onRetry, onDelete }) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await onDelete();
+      setShowDeleteConfirm(false);
+    } catch (error) {
+      console.error('Failed to delete:', error);
+      alert('Failed to delete repository. Please try again.');
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="repo-card">
       <div className="repo-top">
@@ -121,11 +199,43 @@ function RepoCard({ repo, onViewDocs, onRetry }) {
       <div className="repo-updated">Updated {new Date(repo.updatedAt || Date.now()).toLocaleDateString(undefined,{ month:'short', day:'numeric', year:'numeric' })}</div>
       <div className="repo-actions">
         <button className="btn-primary small-btn" onClick={onViewDocs} disabled={repo.status !== 'Ready'}>{repo.status !== 'Ready' ? '...' : 'View Docs'}</button>
-        <button className="square-btn" aria-label="More actions"></button>
+        <button 
+          className="square-btn delete-btn" 
+          aria-label="Delete repository"
+          onClick={() => setShowDeleteConfirm(true)}
+          title="Delete repository"
+        >
+          Delete
+        </button>
       </div>
       {repo.status !== 'Ready' && <div className="card-overlay-progress" aria-hidden>
           {repo.status === 'Processing' && <div className="spinner" />}
       </div>}
+      
+      {showDeleteConfirm && (
+        <div className="modal-backdrop" onMouseDown={(e)=>{ if(e.target===e.currentTarget) setShowDeleteConfirm(false); }}>
+          <div className="modal-panel" role="dialog" aria-modal="true" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2>Delete Repository</h2>
+              <button className="modal-close" onClick={() => setShowDeleteConfirm(false)} aria-label="Close">×</button>
+            </div>
+            <div style={{ padding: '1.5rem' }}>
+              <p style={{ color: '#d0d7e2', marginBottom: '1rem' }}>
+                Are you sure you want to delete <strong>{repo.name}</strong> and all its documentation?
+              </p>
+              <p style={{ color: '#8b949e', fontSize: '0.875rem' }}>
+                This will permanently remove the documentation from your account. Your GitHub repository will not be affected.
+              </p>
+            </div>
+            <div className="modal-actions" style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>Cancel</button>
+              <button type="button" className="btn-primary" onClick={handleDelete} style={{ backgroundColor: '#ef4444' }} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

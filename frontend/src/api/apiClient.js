@@ -194,4 +194,89 @@ export async function testProtectedEndpoint() {
   return apiRequest('/protected');
 }
 
+/**
+ * Get user's documentation generation history from DynamoDB
+ * @param {number} limit - Maximum number of records to return
+ * @returns {Promise<Array>} Array of documentation history records
+ */
+export async function getUserHistory(limit = 10) {
+  try {
+    console.log(`📡 Fetching user history from DynamoDB (limit: ${limit})...`);
+    const response = await apiRequest(`/user/history?limit=${limit}`);
+    console.log(`✅ DynamoDB returned ${response.history?.length || 0} records`);
+    return response.history || [];
+  } catch (error) {
+    console.error('❌ Failed to fetch history from DynamoDB:', error);
+    console.error('   Error details:', error.message);
+    console.error('   This could mean:');
+    console.error('   1. AWS Learners Lab session expired');
+    console.error('   2. Not authenticated (no valid JWT token)');
+    console.error('   3. Backend server not running');
+    console.error('   4. DynamoDB credentials invalid');
+    return []; // Return empty array on error - won't crash the app
+  }
+}
+
+/**
+ * Get a specific documentation record by ID from DynamoDB
+ * @param {string} recordId - Documentation record ID
+ * @returns {Promise<any>} Documentation record or null
+ */
+export async function getDocumentationById(recordId) {
+  try {
+    return await apiRequest(`/user/documentation/${recordId}`);
+  } catch (error) {
+    console.warn('Failed to fetch documentation record:', error);
+    return null; // Return null on error - won't crash the app
+  }
+}
+
+/**
+ * Delete a documentation record from DynamoDB
+ * @param {string} recordId - Documentation record ID to delete
+ * @returns {Promise<any>} Deletion result
+ */
+export async function deleteDocumentation(recordId) {
+  try {
+    // Encode the recordId to handle special characters like # in DOC#timestamp#hash
+    const encodedRecordId = encodeURIComponent(recordId);
+    return await apiRequest(`/user/documentation/${encodedRecordId}`, {
+      method: 'DELETE'
+    });
+  } catch (error) {
+    console.warn('Failed to delete documentation record:', error);
+    throw error; // Throw so UI can show error message
+  }
+}
+
+/**
+ * Get user preferences from DynamoDB
+ * @returns {Promise<any>} User preferences
+ */
+export async function getUserPreferences() {
+  try {
+    return await apiRequest('/user/preferences');
+  } catch (error) {
+    console.warn('Failed to fetch user preferences:', error);
+    return null; // Return null on error - won't crash the app
+  }
+}
+
+/**
+ * Save user preferences to DynamoDB
+ * @param {Object} preferences - Preferences object
+ * @returns {Promise<any>} Save result
+ */
+export async function saveUserPreferences(preferences) {
+  try {
+    return await apiRequest('/user/preferences', {
+      method: 'POST',
+      body: JSON.stringify(preferences)
+    });
+  } catch (error) {
+    console.warn('Failed to save user preferences:', error);
+    return { status: 'error', message: error.message };
+  }
+}
+
 export { API_BASE_URL };
