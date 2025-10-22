@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 load_dotenv()
 
-DYNAMODB_TABLE_NAME = os.getenv('DYNAMODB_TABLE_NAME', 'RepoDocs-Users')
+DYNAMODB_TABLE_NAME = os.getenv('DYNAMODB_TABLE_NAME', 'rep')
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
 
 # Initialize DynamoDB client
