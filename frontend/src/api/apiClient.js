@@ -261,4 +261,38 @@ export async function saveUserPreferences(preferences) {
   }
 }
 
+/**
+ * Check if a repository has updates since last documentation generation
+ * @param {string} recordId - Documentation record ID to check
+ * @returns {Promise<any>} Update information
+ */
+export async function checkRepoUpdates(recordId) {
+  try {
+    const encodedRecordId = encodeURIComponent(recordId);
+    return await apiRequest(`/user/documentation/${encodedRecordId}/check-updates`, {
+      method: 'POST'
+    });
+  } catch (error) {
+    console.warn('Failed to check repository updates:', error);
+    return { has_updates: false, error: error.message };
+  }
+}
+
+/**
+ * Regenerate documentation for a repository
+ * @param {string} recordId - Documentation record ID to regenerate
+ * @returns {Promise<any>} Regeneration result with updated documentation
+ */
+export async function regenerateDocumentation(recordId) {
+  try {
+    const encodedRecordId = encodeURIComponent(recordId);
+    return await apiRequest(`/user/documentation/${encodedRecordId}/regenerate`, {
+      method: 'POST'
+    });
+  } catch (error) {
+    console.error('Failed to regenerate documentation:', error);
+    throw error; // Throw so UI can show error message
+  }
+}
+
 export { API_BASE_URL };

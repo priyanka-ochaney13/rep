@@ -8,98 +8,98 @@ import '../App.css';
 const features = [
   {
     title: 'AI-Powered Generation',
-    desc: 'Automatically creates comprehensive READMEs, code summaries, and changelogs using advanced AI models trained on millions of repositories.',
+    desc: 'Automatically creates comprehensive READMEs, code summaries, and detailed project analysis using advanced AI models powered by Mistral AI.',
     icon: '✨',
     color: '--c1',
     details: [
-      'Smart code analysis and understanding',
+      'Mistral AI-powered code understanding',
       'Context-aware documentation generation',
       'Natural language explanations',
-      'Automated API documentation'
+      'Automated file-level analysis'
     ]
   },
   {
-    title: 'Mermaid Diagrams',
-    desc: 'Generate beautiful, exportable diagrams using Mermaid.js – visualize your code structure, dependencies, and workflows automatically.',
+    title: 'Interactive Mermaid Diagrams',
+    desc: 'Generate beautiful, interactive architecture diagrams with zoom, pan, and export capabilities. Visualize your code structure professionally.',
     icon: '📊',
     color: '--c2',
     details: [
-      'Automatic architecture diagrams',
-      'Dependency flow charts',
-      'Database schema visualization',
-      'Export as PNG or SVG'
+      'Automatic architecture flowcharts',
+      'Hierarchical component organization',
+      'Interactive zoom & pan controls',
+      'Export as SVG or PNG'
     ]
   },
   {
-    title: 'Real-Time Updates',
-    desc: 'Documentation automatically updates with every repository change, ensuring consistency and accuracy across your entire team.',
-    icon: '⚡',
+    title: 'Smart Documentation Regeneration',
+    desc: 'Manually check for repository changes and regenerate documentation with one click. Keep your docs in sync without creating duplicates.',
+    icon: '🔄',
     color: '--c3',
     details: [
-      'GitHub webhook integration',
-      'Instant documentation refresh',
-      'Version history tracking',
-      'Change notifications'
+      'Manual change detection',
+      'One-click regeneration',
+      'Preserves record history',
+      'Tracks commit metadata'
     ]
   },
   {
-    title: 'Multiple Export Formats',
-    desc: 'Export documentation in PDF and Markdown formats for maximum flexibility. Share with your team or integrate into existing workflows.',
-    icon: '📥',
+    title: 'GitHub Integration',
+    desc: 'Connect any public or private GitHub repository. Support for custom branches, commit tracking, and secure authentication.',
+    icon: '�',
     color: '--c4',
     details: [
-      'PDF export with custom styling',
-      'Markdown for GitHub/GitLab',
-      'HTML documentation sites',
-      'API documentation formats'
+      'Public & private repositories',
+      'Custom branch support',
+      'Commit SHA tracking',
+      'GitHub API integration'
     ]
   },
   {
-    title: 'Code Summaries',
-    desc: 'Get instant summaries of complex codebases. Understand what each file, function, and module does without reading thousands of lines.',
-    icon: '📝',
+    title: 'Detailed Code Analysis',
+    desc: 'Get comprehensive analysis of each file including purpose, key functions, technical details, and language detection.',
+    icon: '�',
     color: '--c1',
     details: [
-      'File-level summaries',
-      'Function documentation',
-      'Complex logic explanations',
-      'Quick onboarding guides'
+      'File-level purpose analysis',
+      'Function & component detection',
+      'Technical implementation details',
+      'Export as MD or PDF'
     ]
   },
   {
-    title: 'Smart Changelogs',
-    desc: 'Automatically generate changelogs from your git history. Never manually write release notes again.',
-    icon: '📋',
+    title: 'Zero Local Storage',
+    desc: 'All processing happens in-memory with no temporary files created. Secure, fast, and leaves no trace on the server.',
+    icon: '�',
     color: '--c2',
     details: [
-      'Semantic version detection',
-      'Grouped by feature/fix/breaking',
-      'Contributor attribution',
-      'Release note generation'
+      'In-memory code processing',
+      'No temporary files',
+      'Enhanced security',
+      'Faster generation'
     ]
   },
   {
     title: 'Multi-Language Support',
-    desc: 'Works with JavaScript, TypeScript, Python, Go, Java, and more. One tool for all your projects.',
+    desc: 'Works with JavaScript, TypeScript, Python, Java, Go, and more. Automatically detects languages and frameworks.',
     icon: '🌐',
     color: '--c3',
     details: [
-      'JavaScript & TypeScript',
+      'JavaScript, TypeScript, JSX',
       'Python',
-      'Go, Java, C++',
-      'Framework-specific docs'
+      'Java, Go, C++, Rust',
+      'Framework detection'
     ]
   },
   {
-    title: 'Team Collaboration',
-    desc: 'Share documentation with your team, manage access permissions, and collaborate on improving your docs.',
-    icon: '👥',
+    title: 'AWS Cognito Authentication',
+    desc: 'Secure user authentication with AWS Cognito. Email verification, JWT tokens, and protected API endpoints.',
+    icon: '�',
     color: '--c4',
     details: [
-      'Team workspaces',
-      'Role-based access control',
-      'Commenting and feedback',
-      'Approval workflows'
+      'Email verification',
+      'JWT token authentication',
+      'Secure password policies',
+      'Protected user data'
     ]
   }
 ];
@@ -107,17 +107,17 @@ const features = [
 const useCases = [
   {
     title: 'For Developers',
-    desc: 'Spend less time writing docs, more time coding. Focus on building features while RepoX handles documentation.',
+    desc: 'Spend less time writing docs, more time coding. Generate professional documentation in seconds with AI-powered analysis.',
     icon: '💻'
   },
   {
     title: 'For Teams',
-    desc: 'Ensure everyone has access to up-to-date documentation. Improve collaboration and reduce onboarding time.',
+    desc: 'Keep documentation synchronized with your codebase. Check for changes and regenerate docs manually when needed without creating duplicates.',
     icon: '🤝'
   },
   {
     title: 'For Open Source',
-    desc: 'Make your projects more accessible. Good documentation attracts more contributors and users.',
+    desc: 'Make your projects more accessible with comprehensive READMEs, architecture diagrams, and detailed code analysis.',
     icon: '🌟'
   }
 ];
@@ -146,11 +146,11 @@ export default function FeaturesPage() {
           <h1>
             Everything You Need for
             <br />
-            <span className="gradient">Professional Documentation</span>
+            <span className="gradient">Automated Documentation</span>
           </h1>
           <p>
-            RepoX combines AI-powered generation, real-time updates, and flexible export options
-            to deliver the most comprehensive documentation solution for modern development teams.
+            RepoX combines Mistral AI-powered analysis, interactive architecture diagrams, and smart regeneration
+            to deliver comprehensive documentation that stays in sync with your codebase.
           </p>
         </section>
 
@@ -159,7 +159,7 @@ export default function FeaturesPage() {
           <div className="section-inner">
             <h2 className="section-title">Core Features</h2>
             <p className="section-lead">
-              Powerful automation tools that save you hours of manual work
+              Powerful AI automation and smart features that save you hours of manual work
             </p>
             <div className="card-grid two-cols four-rows">
               {features.map((feature) => (
@@ -212,7 +212,7 @@ export default function FeaturesPage() {
           <div className="section-inner">
             <h2 className="section-title">How It Works</h2>
             <p className="section-lead">
-              Simple, automated workflow that integrates seamlessly with your development process
+              Simple automated workflow with zero local storage - everything processes in-memory
             </p>
             <div style={{ 
               maxWidth: '800px', 
@@ -224,22 +224,22 @@ export default function FeaturesPage() {
                 {
                   step: '1',
                   title: 'Connect Your Repository',
-                  desc: 'Simply provide your GitHub repository URL. RepoX securely accesses your code.'
+                  desc: 'Provide your GitHub repository URL and branch. RepoX securely accesses your code using GitHub API.'
                 },
                 {
                   step: '2',
                   title: 'AI Analyzes Your Code',
-                  desc: 'Our advanced AI reads through your codebase, understanding structure, dependencies, and logic.'
+                  desc: 'Mistral AI reads through your codebase in-memory, understanding structure, dependencies, and logic without storing files locally.'
                 },
                 {
                   step: '3',
                   title: 'Documentation Generated',
-                  desc: 'Comprehensive docs, diagrams, and summaries are created automatically in seconds.'
+                  desc: 'Comprehensive README, interactive Mermaid diagrams, and detailed file analysis are created automatically in seconds.'
                 },
                 {
                   step: '4',
-                  title: 'Export & Share',
-                  desc: 'Download in your preferred format or share directly with your team.'
+                  title: 'View, Export & Regenerate',
+                  desc: 'View docs in an interactive UI, export as Markdown/PDF, or regenerate when your code changes.'
                 }
               ].map((step) => (
                 <div 
@@ -286,7 +286,7 @@ export default function FeaturesPage() {
           <div className="section-inner cta-inner">
             <h2 className="section-title">Ready to Get Started?</h2>
             <p className="section-lead">
-              Join thousands of developers who've already automated their documentation workflow
+              Join developers who've automated their documentation workflow with AI-powered generation
             </p>
             <div className="cta-row">
               <button 

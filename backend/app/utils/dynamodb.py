@@ -112,7 +112,8 @@ def save_documentation_record(
     repo_url: str,
     readme_content: str,
     summaries: Dict[str, str],
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
+    record_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Save a documentation generation record to DynamoDB.
@@ -123,13 +124,20 @@ def save_documentation_record(
         readme_content: Generated README content
         summaries: File summaries
         metadata: Additional metadata (visuals, commit info, etc.)
+        record_id: Optional existing record ID for updates (if None, creates new record)
         
     Returns:
         Dict with save status and record ID
     """
     try:
-        # Generate unique record ID
-        record_id = f"DOC#{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}#{uuid.uuid4().hex[:8]}"
+        # Use existing record_id for updates, or generate new one for new records
+        is_update = record_id is not None
+        if not record_id:
+            record_id = f"DOC#{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}#{uuid.uuid4().hex[:8]}"
+        
+        # Extract commit SHA and branch from metadata
+        last_commit_sha = metadata.get('last_commit_sha') if metadata else None
+        branch = metadata.get('branch', 'main') if metadata else 'main'
         
         item = {
             'userId': user_id,
@@ -139,17 +147,26 @@ def save_documentation_record(
             'readmeContent': readme_content,
             'summaries': summaries,
             'metadata': metadata or {},
-            'createdAt': get_current_timestamp(),
+            'lastCommitSha': last_commit_sha,
+            'lastSyncedAt': get_current_timestamp(),
+            'branch': branch,
+            'hasUpdates': False,  # Reset flag after regeneration
             'updatedAt': get_current_timestamp()
         }
         
+        # Add createdAt only for new records
+        if not is_update:
+            item['createdAt'] = get_current_timestamp()
+        
         table.put_item(Item=item)
         
-        logger.info(f"Saved documentation record for user: {user_id}, repo: {repo_url}")
+        action = "Updated" if is_update else "Saved"
+        logger.info(f"{action} documentation record for user: {user_id}, repo: {repo_url}, recordId: {record_id}")
         return {
             'status': 'success',
-            'message': 'Documentation record saved',
-            'recordId': record_id
+            'message': f'Documentation record {action.lower()}',
+            'recordId': record_id,
+            'isUpdate': is_update
         }
         
     except Exception as e:
@@ -293,6 +310,67 @@ def save_repository_stats(
 
 
 # ==================== UTILITY FUNCTIONS ====================
+
+def mark_repo_has_updates(user_id: str, record_id: str) -> Dict[str, Any]:
+    """
+    Mark a repository as having available updates.
+    
+    Args:
+        user_id: Cognito user ID
+        record_id: Documentation record ID
+        
+    Returns:
+        Dict with update status
+    """
+    try:
+        table.update_item(
+            Key={
+                'userId': user_id,
+                'recordId': record_id
+            },
+            UpdateExpression='SET hasUpdates = :val',
+            ExpressionAttributeValues={
+                ':val': True
+            }
+        )
+        
+        logger.info(f"Marked record {record_id} as having updates")
+        return {'status': 'success', 'message': 'Repository marked as having updates'}
+        
+    except Exception as e:
+        logger.error(f"Error marking repo updates: {str(e)}")
+        return {'status': 'error', 'message': str(e)}
+
+
+def get_repo_by_url(user_id: str, repo_url: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a repository documentation record by repository URL.
+    
+    Args:
+        user_id: Cognito user ID
+        repo_url: Repository URL to search for
+        
+    Returns:
+        Documentation record or None if not found
+    """
+    try:
+        # Query all documentation records for this user
+        response = table.query(
+            KeyConditionExpression=Key('userId').eq(user_id) & Key('recordId').begins_with('DOC#'),
+            FilterExpression='repoUrl = :url',
+            ExpressionAttributeValues={':url': repo_url}
+        )
+        
+        items = response.get('Items', [])
+        if items:
+            return items[0]  # Return the first match
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting repo by URL: {str(e)}")
+        return None
+
 
 def test_connection() -> Dict[str, Any]:
     """

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useState } from 'react';
-import { getUserHistory, generateDocs, deleteDocumentation } from '../api/apiClient.js';
+import { getUserHistory, generateDocs, deleteDocumentation, checkRepoUpdates, regenerateDocumentation } from '../api/apiClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 // --- Types / Constants --------------------------------------------------
@@ -44,6 +44,9 @@ function transformDynamoDBRecordToRepo(record) {
     lang: metadata.input_type === 'url' ? 'Unknown' : 'Mixed',
     status: 'Ready', // All DynamoDB records are completed
     updatedAt: record.createdAt ? new Date(record.createdAt).toISOString().split('T')[0] : todayISO(),
+    hasUpdates: record.hasUpdates || false, // Check if repo has available updates
+    commitsBehind: 0, // Will be populated when checking updates
+    updateMessage: '', // Will be populated when checking updates
     docs: {
       readme: record.readmeContent || '',
       summary: record.summaries || {},
@@ -255,6 +258,51 @@ export function RepoProvider({ children }) {
     await connectRepo(githubUrl, {});
   }, [state.repos, updateRepo, connectRepo]);
 
+  const checkForUpdates = useCallback(async (id) => {
+    try {
+      console.log(`🔍 Checking for updates: ${id}`);
+      const updateInfo = await checkRepoUpdates(id);
+      
+      // Update repo with hasUpdates flag
+      if (updateInfo.has_updates) {
+        updateRepo(id, { 
+          hasUpdates: true,
+          commitsBehind: updateInfo.commits_behind,
+          updateMessage: updateInfo.message
+        });
+      }
+      
+      return updateInfo;
+    } catch (error) {
+      console.error('Failed to check for updates:', error);
+      return { has_updates: false, error: error.message };
+    }
+  }, [updateRepo]);
+
+  const regenerateRepo = useCallback(async (id) => {
+    try {
+      console.log(`🔄 Regenerating documentation: ${id}`);
+      
+      // Update status to Processing
+      updateRepo(id, { status: 'Processing', hasUpdates: false });
+      
+      // Call regenerate API
+      const result = await regenerateDocumentation(id);
+      
+      // Refresh from DynamoDB to get updated data
+      await fetchReposFromDynamoDB();
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to regenerate documentation:', error);
+      
+      // Update status back to Ready but with error
+      updateRepo(id, { status: 'Failed' });
+      
+      return { error: error.message || 'Failed to regenerate documentation' };
+    }
+  }, [updateRepo, fetchReposFromDynamoDB]);
+
   const value = {
     repos: state.repos,
     loading: state.loading,
@@ -263,7 +311,9 @@ export function RepoProvider({ children }) {
     updateRepo,
     retryGeneration,
     deleteRepo,
-    refreshRepos: fetchReposFromDynamoDB
+    refreshRepos: fetchReposFromDynamoDB,
+    checkForUpdates,
+    regenerateRepo
   };
 
   return <RepoContext.Provider value={value}>{children}</RepoContext.Provider>;

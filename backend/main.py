@@ -11,8 +11,9 @@ from app.utils.dynamodb import (
     save_user_preferences, get_user_preferences,
     save_documentation_record, get_user_documentation_history,
     get_documentation_by_id, delete_documentation_record,
-    test_connection
+    test_connection, mark_repo_has_updates, get_repo_by_url
 )
+from app.utils.github_changes import check_repo_updates, get_latest_commit_info
 from fastapi.responses import StreamingResponse
 import io, os
 import zipfile
@@ -535,6 +536,159 @@ async def delete_documentation(
     return result
 
 
+@app.post("/user/documentation/{record_id}/check-updates")
+async def check_documentation_updates(
+    record_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Check if a repository has updates since last documentation generation.
+    
+    Args:
+        record_id: Documentation record ID to check
+        current_user: Authenticated user from JWT
+        
+    Returns:
+        Dict with update information
+    """
+    user_id = current_user.get('sub')
+    
+    # Get the documentation record
+    record = get_documentation_by_id(user_id, record_id)
+    
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Documentation record not found"
+        )
+    
+    repo_url = record.get('repoUrl')
+    last_commit_sha = record.get('lastCommitSha')
+    branch = record.get('branch', 'main')
+    
+    # Check for updates
+    update_info = check_repo_updates(repo_url, last_commit_sha, branch)
+    
+    # If updates found, mark the record
+    if update_info.get('has_updates'):
+        mark_repo_has_updates(user_id, record_id)
+    
+    return {
+        'recordId': record_id,
+        'repoUrl': repo_url,
+        **update_info
+    }
+
+
+@app.post("/user/documentation/{record_id}/regenerate")
+async def regenerate_documentation(
+    record_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Regenerate documentation for an existing repository.
+    
+    Args:
+        record_id: Documentation record ID to regenerate
+        current_user: Authenticated user from JWT
+        
+    Returns:
+        Updated documentation
+    """
+    user_id = current_user.get('sub')
+    
+    # Get the existing documentation record
+    record = get_documentation_by_id(user_id, record_id)
+    
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Documentation record not found"
+        )
+    
+    repo_url = record.get('repoUrl')
+    branch = record.get('branch', 'main')
+    
+    logger.info(f"🔄 Regenerating documentation for: {repo_url} (recordId: {record_id})")
+    
+    try:
+        # Run the documentation generation pipeline
+        state = DocGenState(
+            input_type="url",
+            input_data=repo_url,
+            branch=branch,
+            preferences=DocGenPreferences(
+                generate_readme=True,
+                generate_summary=True,
+                visualize_structure=True
+            )
+        )
+        
+        result = run_pipeline(state)
+        
+        # Get latest commit info
+        commit_info = get_latest_commit_info(repo_url, branch)
+        
+        # Update metadata with new commit info
+        metadata = {
+            "visuals": result.get("visuals"),
+            "folder_tree": result.get("folder_tree"),
+            "input_type": result.get("input_type"),
+            "project_analysis": result.get("project_analysis"),
+            "last_commit_sha": commit_info.get('sha'),
+            "last_commit_message": commit_info.get('message'),
+            "last_commit_date": commit_info.get('date'),
+            "branch": branch
+        }
+        
+        # Update the existing record (reuse the same record_id)
+        save_result = save_documentation_record(
+            user_id=user_id,
+            repo_url=repo_url,
+            readme_content=result.get("readme", ""),
+            summaries=result.get("summaries", {}),
+            metadata=metadata,
+            record_id=record_id  # Pass existing ID to update
+        )
+        
+        logger.info(f"✅ Documentation regenerated successfully for record: {record_id}")
+        
+        return {
+            "message": "Documentation regenerated successfully",
+            "recordId": record_id,
+            "readme": result.get("readme"),
+            "summaries": result.get("summaries"),
+            "modified_files": result.get("modified_files"),
+            "visuals": result.get("visuals"),
+            "folder_tree": result.get("folder_tree"),
+            "input_type": result.get("input_type"),
+            "project_analysis": result.get("project_analysis"),
+            "commit_info": commit_info
+        }
+        
+    except ValueError as ve:
+        error_message = str(ve)
+        logger.error(f"Validation error during regeneration: {error_message}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_message
+        )
+    except requests.HTTPError as he:
+        error_message = str(he)
+        logger.error(f"GitHub API error during regeneration: {error_message}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"GitHub API error: {error_message}"
+        )
+    except Exception as e:
+        error_message = str(e)
+        logger.error(f"Unexpected error during regeneration: {error_message}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to regenerate documentation: {error_message}"
+        )
+
+
 # ==================== MODIFIED GENERATE ENDPOINT ====================
 
 @app.post("/generate")
@@ -620,19 +774,34 @@ async def generate_docs(
         user_id = current_user.get('sub')
         repo_identifier = input_data if input_type == "url" else "zip_upload"
         
+        # Get latest commit info for GitHub URLs
+        commit_info = {}
+        if input_type == "url":
+            commit_info = get_latest_commit_info(repo_identifier, branch or "main")
+        
         metadata = {
             "visuals": result.get("visuals"),
             "folder_tree": result.get("folder_tree"),
             "input_type": result.get("input_type"),
-            "project_analysis": result.get("project_analysis")
+            "project_analysis": result.get("project_analysis"),
+            "last_commit_sha": commit_info.get('sha'),
+            "last_commit_message": commit_info.get('message'),
+            "last_commit_date": commit_info.get('date'),
+            "branch": branch or "main"
         }
+        
+        # Check if this repo already exists for this user
+        existing_record = None
+        if input_type == "url":
+            existing_record = get_repo_by_url(user_id, repo_identifier)
         
         save_result = save_documentation_record(
             user_id=user_id,
             repo_url=repo_identifier,
             readme_content=result.get("readme", ""),
             summaries=result.get("summaries", {}),
-            metadata=metadata
+            metadata=metadata,
+            record_id=existing_record.get('recordId') if existing_record else None
         )
         
         logger.info(f"DynamoDB save result: {save_result}")
