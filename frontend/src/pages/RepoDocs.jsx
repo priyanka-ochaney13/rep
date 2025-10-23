@@ -8,21 +8,18 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toPng } from 'html-to-image';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
-import { commitReadme } from '../api/apiClient.js';
 import '../App.css';
 import './RepoDocs.css';
 
 const TABS = [
-  { id: 'readme', label: '📄 README', icon: '📄' },
-  { id: 'architecture', label: '🏗️ Architecture', icon: '🏗️' },
-  { id: 'code-analysis', label: '🔍 Code Analysis', icon: '🔍' },
+  { id: 'readme', label: 'README', icon: '📄' },
+  { id: 'architecture', label: 'Architecture', icon: '🏗️' },
+  { id: 'code-analysis', label: 'Code Analysis', icon: '🔍' },
 ];
 
 export default function RepoDocsPage() {
   const { owner, name } = useParams();
   const { repos, updateRepo } = useRepos();
-  const [isCommitting, setIsCommitting] = useState(false);
-  const [commitError, setCommitError] = useState(null);
   const [activeTab, setActiveTab] = useState('readme');
   const [mermaid, setMermaid] = useState(null);
   
@@ -88,43 +85,6 @@ export default function RepoDocsPage() {
       }, 100);
     }
   }, [activeTab, mermaid]);
-  
-  const handleCommitToGitHub = async () => {
-    if (!repo || !repo.docs?.readme) return;
-    
-    setIsCommitting(true);
-    setCommitError(null);
-    
-    try {
-      const githubUrl = `https://github.com/${owner}/${name}`;
-      
-      // Use the new commit-only endpoint to avoid regenerating everything
-      const result = await commitReadme({
-        inputData: githubUrl,
-        readmeContent: repo.docs.readme,
-        branch: 'main'
-      });
-      
-      console.log('Commit result:', result);
-      
-      // Update repo with commit status
-      updateRepo(repo.id, {
-        commitStatus: result.commit_status,
-        commitMessage: result.commit_message,
-      });
-      
-      if (result.commit_status === 'success') {
-        alert('✓ README successfully committed to GitHub!');
-      } else {
-        setCommitError(result.commit_message || 'Failed to commit README');
-      }
-    } catch (error) {
-      console.error('Commit error:', error);
-      setCommitError(error.message || 'Failed to commit README to GitHub');
-    } finally {
-      setIsCommitting(false);
-    }
-  };
 
   if (!repo) {
     return (
@@ -167,40 +127,11 @@ export default function RepoDocsPage() {
               </div>
               
               <div className="docs-header-actions">
-                {(!repo.commitStatus || repo.commitStatus !== 'success') && (
-                  <button 
-                    className="btn-primary small-btn" 
-                    onClick={handleCommitToGitHub}
-                    disabled={isCommitting || !repo.docs?.readme}
-                  >
-                    {isCommitting ? 'Committing...' : 'Commit to GitHub'}
-                  </button>
-                )}
                 <Link to="/repositories" className="btn-secondary small-btn">
                   Back
                 </Link>
               </div>
             </div>
-
-            {/* Status Messages */}
-            {commitError && (
-              <div className="status-alert error">
-                <strong>Commit Failed: </strong>
-                {commitError}
-                {commitError.includes('authentication') || commitError.includes('credentials') ? (
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', opacity: 0.9 }}>
-                    💡 <strong>Tip:</strong> Configure Git credentials or use a Personal Access Token
-                  </div>
-                ) : null}
-              </div>
-            )}
-            
-            {repo.commitStatus && repo.commitStatus !== 'skipped' && !commitError && (
-              <div className={`status-alert ${repo.commitStatus === 'success' ? 'success' : 'error'}`}>
-                <strong>{repo.commitStatus === 'success' ? '✓ Success: ' : '⚠ Warning: '}</strong>
-                {repo.commitMessage || (repo.commitStatus === 'success' ? 'README committed to GitHub' : 'Failed to commit README')}
-              </div>
-            )}
 
             {/* Horizontal Tab Navigation */}
             <div className="docs-tabs">
@@ -234,13 +165,78 @@ export default function RepoDocsPage() {
 
 // README Tab Component
 function ReadmeTab({ repo }) {
+  const handleDownload = () => {
+    const blob = new Blob([repo.docs?.readme || ''], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'README.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(repo.docs?.readme || '');
+    alert('✓ Copied to clipboard!');
+  };
+
   return (
     <div className="tab-panel">
-      <div className="tab-panel-header">
-        <h2>📄 Project Documentation</h2>
-        <p className="tab-panel-desc">
-          Comprehensive README with setup instructions, usage examples, and contribution guidelines
-        </p>
+      <div className="tab-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2>📄 Project Documentation</h2>
+          <p className="tab-panel-desc">
+            Comprehensive README with setup instructions, usage examples, and contribution guidelines
+          </p>
+        </div>
+        {repo.docs?.readme && (
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button
+              onClick={handleDownload}
+              style={{
+                padding: '0.625rem 1.25rem',
+                background: '#6366f1',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'background 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.background = '#4f46e5'}
+              onMouseOut={(e) => e.target.style.background = '#6366f1'}
+            >
+              ⬇️ Download Markdown
+            </button>
+            <button
+              onClick={handleCopy}
+              style={{
+                padding: '0.625rem 1.25rem',
+                background: '#8b5cf6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'background 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.background = '#7c3aed'}
+              onMouseOut={(e) => e.target.style.background = '#8b5cf6'}
+            >
+              📋 Copy to Clipboard
+            </button>
+          </div>
+        )}
       </div>
       
       <div className="content-card">
@@ -252,33 +248,11 @@ function ReadmeTab({ repo }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">📝</div>
+            <div className="empty-state-icon">�</div>
             <h3>No README Available</h3>
             <p>The README hasn't been generated yet for this repository.</p>
           </div>
         )}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="quick-actions">
-        <button className="action-btn" onClick={() => {
-          const blob = new Blob([repo.docs?.readme || ''], { type: 'text/markdown' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'README.md';
-          a.click();
-        }}>
-          <span>⬇️</span>
-          Download Markdown
-        </button>
-        <button className="action-btn" onClick={() => {
-          navigator.clipboard.writeText(repo.docs?.readme || '');
-          alert('✓ Copied to clipboard!');
-        }}>
-          <span>📋</span>
-          Copy to Clipboard
-        </button>
       </div>
     </div>
   );
@@ -640,6 +614,227 @@ function CodeAnalysisTab({ repo }) {
   const hasSummaries = summaries && typeof summaries === 'object' && Object.keys(summaries).length > 0;
   const hasAnalysis = projectAnalysis && projectAnalysis.detailed_analysis;
 
+  // Export functions
+  const exportAsMarkdown = () => {
+    if (!hasAnalysis || !projectAnalysis.detailed_analysis) return;
+    
+    let markdown = `# Code Analysis Report\n\n`;
+    markdown += `**Repository:** ${repo.owner}/${repo.name}\n\n`;
+    markdown += `**Generated:** ${new Date().toLocaleDateString()}\n\n`;
+    
+    // Statistics
+    markdown += `## Statistics\n\n`;
+    markdown += `- **Files Analyzed:** ${projectAnalysis.file_count || 0}\n`;
+    markdown += `- **Languages:** ${projectAnalysis.languages?.length || 0}\n`;
+    markdown += `- **Detailed Analyses:** ${Object.keys(projectAnalysis.detailed_analysis).length}\n\n`;
+    
+    // File analyses
+    markdown += `## File Analysis\n\n`;
+    Object.entries(projectAnalysis.detailed_analysis).forEach(([filepath, analysis]) => {
+      markdown += `### ${filepath}\n\n`;
+      
+      if (analysis.language) {
+        markdown += `**Language:** ${analysis.language}\n\n`;
+      }
+      
+      if (analysis.purpose) {
+        markdown += `**Purpose:**\n${analysis.purpose}\n\n`;
+      }
+      
+      if (analysis.functions && analysis.functions.length > 0) {
+        markdown += `**Key Functions & Components:**\n`;
+        analysis.functions.forEach(func => {
+          markdown += `- ${func}\n`;
+        });
+        markdown += `\n`;
+      }
+      
+      if (analysis.key_details && analysis.key_details.length > 0) {
+        markdown += `**Technical Details:**\n`;
+        analysis.key_details.forEach(detail => {
+          markdown += `- ${detail}\n`;
+        });
+        markdown += `\n`;
+      }
+      
+      markdown += `---\n\n`;
+    });
+    
+    // Download
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${repo.name}-code-analysis.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportAsPDF = () => {
+    if (!hasAnalysis || !projectAnalysis.detailed_analysis) return;
+    
+    // Create a printable HTML version
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Code Analysis - ${repo.name}</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+          }
+          h1 { color: #1a1a1a; border-bottom: 3px solid #6366f1; padding-bottom: 10px; }
+          h2 { color: #2d3748; margin-top: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+          h3 { color: #4a5568; margin-top: 25px; }
+          h4 { color: #718096; text-transform: uppercase; font-size: 0.875rem; letter-spacing: 0.05em; margin-top: 20px; }
+          .meta { color: #666; font-size: 0.9rem; margin-bottom: 30px; }
+          .stats { 
+            background: #f7fafc; 
+            padding: 20px; 
+            border-radius: 8px; 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 20px;
+            margin: 20px 0;
+          }
+          .stat-item { text-align: center; }
+          .stat-value { font-size: 2rem; font-weight: bold; color: #6366f1; }
+          .stat-label { font-size: 0.875rem; color: #718096; }
+          .file-analysis {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f9fafb;
+            border-left: 4px solid #6366f1;
+            border-radius: 4px;
+            page-break-inside: avoid;
+          }
+          .language-badge {
+            display: inline-block;
+            background: #e0e7ff;
+            color: #5b21b6;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+          }
+          .purpose { margin: 15px 0; }
+          .section { margin: 20px 0; }
+          ul { margin: 10px 0; padding-left: 20px; }
+          li { margin: 8px 0; }
+          code { 
+            background: #edf2f7; 
+            padding: 2px 6px; 
+            border-radius: 3px; 
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+          }
+          hr { border: none; border-top: 1px solid #e2e8f0; margin: 30px 0; }
+          @media print {
+            body { padding: 20px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Code Analysis Report</h1>
+        <div class="meta">
+          <strong>Repository:</strong> ${repo.owner}/${repo.name}<br>
+          <strong>Generated:</strong> ${new Date().toLocaleString()}
+        </div>
+        
+        <h2>Statistics</h2>
+        <div class="stats">
+          <div class="stat-item">
+            <div class="stat-value">${projectAnalysis.file_count || 0}</div>
+            <div class="stat-label">Files Analyzed</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">${projectAnalysis.languages?.length || 0}</div>
+            <div class="stat-label">Languages</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">${Object.keys(projectAnalysis.detailed_analysis).length}</div>
+            <div class="stat-label">Detailed Analyses</div>
+          </div>
+        </div>
+        
+        <h2>File Analysis</h2>
+    `;
+    
+    Object.entries(projectAnalysis.detailed_analysis).forEach(([filepath, analysis]) => {
+      html += `<div class="file-analysis">`;
+      html += `<h3>${filepath}</h3>`;
+      
+      if (analysis.language) {
+        html += `<span class="language-badge">${analysis.language}</span>`;
+      }
+      
+      if (analysis.purpose) {
+        html += `<div class="purpose"><h4>Purpose</h4><p>${analysis.purpose}</p></div>`;
+      }
+      
+      if (analysis.functions && analysis.functions.length > 0) {
+        html += `<div class="section"><h4>Key Functions & Components</h4><ul>`;
+        analysis.functions.forEach(func => {
+          html += `<li>${func}</li>`;
+        });
+        html += `</ul></div>`;
+      }
+      
+      if (analysis.key_details && analysis.key_details.length > 0) {
+        html += `<div class="section"><h4>Technical Details</h4><ul>`;
+        analysis.key_details.forEach(detail => {
+          html += `<li>${detail}</li>`;
+        });
+        html += `</ul></div>`;
+      }
+      
+      html += `</div>`;
+    });
+    
+    html += `
+        <div class="no-print" style="margin-top: 40px; text-align: center;">
+          <button onclick="window.print()" style="
+            background: #6366f1; 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 6px; 
+            font-size: 1rem; 
+            cursor: pointer;
+            font-weight: 600;
+          ">Print / Save as PDF</button>
+          <button onclick="window.close()" style="
+            background: #e2e8f0; 
+            color: #1a1a1a; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 6px; 
+            font-size: 1rem; 
+            cursor: pointer;
+            margin-left: 10px;
+            font-weight: 600;
+          ">Close</button>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   // Group files by directory
   const groupedFiles = React.useMemo(() => {
     if (!hasSummaries) return {};
@@ -667,22 +862,68 @@ function CodeAnalysisTab({ repo }) {
 
   return (
     <div className="tab-panel">
-      <div className="tab-panel-header">
-        <h2>Code Analysis & Project Structure</h2>
-        <p className="tab-panel-desc">
-          Detailed breakdown of your project structure with AI-powered analysis of each file's purpose and key functions
-        </p>
+      <div className="tab-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2>Code Analysis & Project Structure</h2>
+          <p className="tab-panel-desc">
+            Detailed breakdown of your project structure with AI-powered analysis of each file's purpose and key functions
+          </p>
+        </div>
+        {hasAnalysis && (
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button
+              onClick={exportAsMarkdown}
+              style={{
+                padding: '0.625rem 1.25rem',
+                background: '#6366f1',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'background 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.background = '#4f46e5'}
+              onMouseOut={(e) => e.target.style.background = '#6366f1'}
+            >
+              📄 Export MD
+            </button>
+            <button
+              onClick={exportAsPDF}
+              style={{
+                padding: '0.625rem 1.25rem',
+                background: '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'background 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.background = '#059669'}
+              onMouseOut={(e) => e.target.style.background = '#10b981'}
+            >
+              📑 Export PDF
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Project Structure Tree */}
-      {hasAnalysis && projectAnalysis.structure_tree && (
+      {/* Project Statistics */}
+      {hasAnalysis && (
         <div className="content-card" style={{ marginBottom: '2rem' }}>
-          <h3 className="card-title">📂 Project Structure</h3>
           <div className="structure-stats" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
             gap: '1rem',
-            marginBottom: '1.5rem',
             padding: '1rem',
             background: 'rgba(99, 102, 241, 0.1)',
             borderRadius: '8px',
@@ -707,18 +948,6 @@ function CodeAnalysisTab({ repo }) {
               <div style={{ fontSize: '0.875rem', color: '#8b949e' }}>Detailed Analyses</div>
             </div>
           </div>
-          <pre style={{ 
-            background: '#0f1724', 
-            padding: '1.5rem', 
-            borderRadius: '8px', 
-            overflow: 'auto',
-            fontSize: '0.875rem',
-            lineHeight: '1.8',
-            fontFamily: 'ui-monospace, monospace',
-            color: '#d0d7e2'
-          }}>
-            {projectAnalysis.structure_tree}
-          </pre>
         </div>
       )}
 
@@ -731,7 +960,7 @@ function CodeAnalysisTab({ repo }) {
             color: '#d0d7e2',
             fontWeight: '600'
           }}>
-            📋 Detailed File Analysis
+            Detailed File Analysis
           </h3>
           
           {Object.entries(projectAnalysis.detailed_analysis).map(([filepath, analysis]) => (
@@ -744,7 +973,7 @@ function CodeAnalysisTab({ repo }) {
           {Object.entries(groupedFiles).map(([directory, files]) => (
             <div key={directory} className="directory-section">
               <h3 className="directory-title">
-                <span className="folder-icon">📂</span>
+                <span className="folder-icon"></span>
                 {directory}
               </h3>
               
@@ -752,14 +981,7 @@ function CodeAnalysisTab({ repo }) {
                 {files.map(({ filename, summary }) => (
                   <div key={filename} className="file-card">
                     <div className="file-card-header">
-                      <span className="file-icon">
-                        {filename.endsWith('.py') ? '🐍' :
-                         filename.endsWith('.js') || filename.endsWith('.jsx') ? '📜' :
-                         filename.endsWith('.ts') || filename.endsWith('.tsx') ? '📘' :
-                         filename.endsWith('.java') ? '☕' :
-                         filename.endsWith('.go') ? '🔵' :
-                         '📄'}
-                      </span>
+                      <span className="file-icon"></span>
                       <span className="file-name">{filename.split('/').pop()}</span>
                     </div>
                     <div className="file-card-body">
@@ -781,7 +1003,7 @@ function CodeAnalysisTab({ repo }) {
       ) : (
         <div className="content-card">
           <div className="empty-state">
-            <div className="empty-state-icon">🤖</div>
+            <div className="empty-state-icon"></div>
             <h3>No Code Analysis Available</h3>
             <p>AI-powered code analysis will provide insights into your main functions and modules.</p>
           </div>
@@ -791,7 +1013,7 @@ function CodeAnalysisTab({ repo }) {
       {/* Changelog Section */}
       {repo.docs?.changelog && repo.docs.changelog.length > 0 && (
         <div className="content-card">
-          <h3 className="card-title">📅 Recent Changes</h3>
+          <h3 className="card-title">Recent Changes</h3>
           <div className="changelog-list">
             {repo.docs.changelog.map((entry, index) => (
               <div key={index} className="changelog-item">
@@ -811,15 +1033,8 @@ function FileAnalysisCard({ filepath, analysis }) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   
   const getFileIcon = (filename) => {
-    if (filename.endsWith('.py')) return '🐍';
-    if (filename.endsWith('.js') || filename.endsWith('.jsx')) return '📜';
-    if (filename.endsWith('.ts') || filename.endsWith('.tsx')) return '📘';
-    if (filename.endsWith('.java')) return '☕';
-    if (filename.endsWith('.go')) return '🔵';
-    if (filename.endsWith('.json') || filename.endsWith('.yaml')) return '⚙️';
-    if (filename.endsWith('.css') || filename.endsWith('.scss')) return '🎨';
-    if (filename.endsWith('.html')) return '🌐';
-    return '📄';
+    // Return empty string - no emojis
+    return '';
   };
 
   const filename = filepath.split('/').pop();
@@ -848,7 +1063,6 @@ function FileAnalysisCard({ filepath, analysis }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-          <span style={{ fontSize: '1.5rem' }}>{getFileIcon(filename)}</span>
           <div style={{ flex: 1 }}>
             <div style={{ 
               fontWeight: '600', 
@@ -916,86 +1130,86 @@ function FileAnalysisCard({ filepath, analysis }) {
             </div>
           )}
 
-          {/* Key Functions */}
-          {analysis.functions && analysis.functions.length > 0 && (
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h4 style={{ 
-                fontSize: '0.875rem',
-                fontWeight: '600',
-                color: '#8b949e',
-                marginBottom: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em'
-              }}>
-                Key Functions & Components
-              </h4>
-              <div style={{ 
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.75rem'
-              }}>
-                {analysis.functions.map((func, idx) => (
-                  <div key={idx} style={{
-                    padding: '0.75rem',
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
-                    borderRadius: '8px',
+          {/* Consolidated Details Card */}
+          {((analysis.functions && analysis.functions.length > 0) || (analysis.key_details && analysis.key_details.length > 0)) && (
+            <div style={{ 
+              background: 'rgba(99, 102, 241, 0.05)',
+              border: '1px solid rgba(99, 102, 241, 0.2)',
+              borderRadius: '8px',
+              padding: '1rem',
+              marginBottom: '1rem'
+            }}>
+              {/* Key Functions Section */}
+              {analysis.functions && analysis.functions.length > 0 && (
+                <div style={{ marginBottom: analysis.key_details && analysis.key_details.length > 0 ? '1.5rem' : '0' }}>
+                  <h4 style={{ 
                     fontSize: '0.875rem',
-                    color: '#d0d7e2',
-                    fontFamily: 'ui-monospace, monospace',
-                    lineHeight: '1.5'
+                    fontWeight: '600',
+                    color: '#8b949e',
+                    marginBottom: '0.75rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em'
                   }}>
-                    {func}
+                    Key Functions & Components
+                  </h4>
+                  <div style={{ 
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem'
+                  }}>
+                    {analysis.functions.map((func, idx) => (
+                      <div key={idx} style={{
+                        padding: '0.5rem 0.75rem',
+                        fontSize: '0.875rem',
+                        color: '#d0d7e2',
+                        fontFamily: 'ui-monospace, monospace',
+                        lineHeight: '1.5',
+                        borderLeft: '3px solid rgba(99, 102, 241, 0.5)',
+                        paddingLeft: '0.75rem'
+                      }}>
+                        {func}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                </div>
+              )}
 
-          {/* Technical Details */}
-          {analysis.key_details && analysis.key_details.length > 0 && (
-            <div>
-              <h4 style={{ 
-                fontSize: '0.875rem',
-                fontWeight: '600',
-                color: '#8b949e',
-                marginBottom: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em'
-              }}>
-                Technical Details
-              </h4>
-              <ul style={{ 
-                listStyle: 'none',
-                padding: 0,
-                margin: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5rem'
-              }}>
-                {analysis.key_details.map((detail, idx) => (
-                  <li key={idx} style={{
-                    padding: '0.625rem 0.75rem',
-                    background: 'rgba(245, 158, 11, 0.1)',
-                    border: '1px solid rgba(245, 158, 11, 0.3)',
-                    borderRadius: '6px',
+              {/* Technical Details Section */}
+              {analysis.key_details && analysis.key_details.length > 0 && (
+                <div>
+                  <h4 style={{ 
                     fontSize: '0.875rem',
-                    color: '#d0d7e2',
-                    lineHeight: '1.5',
-                    paddingLeft: '2rem',
-                    position: 'relative'
+                    fontWeight: '600',
+                    color: '#8b949e',
+                    marginBottom: '0.75rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em'
                   }}>
-                    <span style={{
-                      position: 'absolute',
-                      left: '0.75rem',
-                      color: '#f59e0b'
-                    }}>
-                      ▸
-                    </span>
-                    {detail}
-                  </li>
-                ))}
-              </ul>
+                    Technical Details
+                  </h4>
+                  <ul style={{ 
+                    listStyle: 'none',
+                    padding: 0,
+                    margin: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem'
+                  }}>
+                    {analysis.key_details.map((detail, idx) => (
+                      <li key={idx} style={{
+                        padding: '0.5rem 0.75rem',
+                        fontSize: '0.875rem',
+                        color: '#d0d7e2',
+                        lineHeight: '1.5',
+                        borderLeft: '3px solid rgba(99, 102, 241, 0.5)',
+                        paddingLeft: '0.75rem'
+                      }}>
+                        {detail}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 

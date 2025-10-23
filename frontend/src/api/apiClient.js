@@ -137,10 +137,9 @@ export async function apiRequestFormData(endpoint, formData) {
  * @param {string} params.inputData - Input data (URL, etc.)
  * @param {File} params.zipFile - Zip file (if input type is 'zip')
  * @param {string} params.branch - Git branch name
- * @param {boolean} params.commitToGithub - Whether to commit README to GitHub
  * @returns {Promise<any>} Documentation generation result
  */
-export async function generateDocs({ inputType, inputData, zipFile, branch, commitToGithub = false }) {
+export async function generateDocs({ inputType, inputData, zipFile, branch }) {
   const formData = new FormData();
   formData.append('input_type', inputType);
   
@@ -156,30 +155,13 @@ export async function generateDocs({ inputType, inputData, zipFile, branch, comm
     formData.append('branch', branch);
   }
   
-  formData.append('commit_to_github', commitToGithub.toString());
-  
   return apiRequestFormData('/generate', formData);
 }
 
 /**
- * Commit README to GitHub without regenerating documentation
- * @param {Object} params - Commit parameters
- * @param {string} params.inputData - GitHub repository URL
+ * Get user profile from backend
  * @param {string} params.readmeContent - README content to commit
  * @param {string} params.branch - Git branch name
- * @returns {Promise<any>} Commit result
- */
-export async function commitReadme({ inputData, readmeContent, branch = 'main' }) {
-  const formData = new FormData();
-  formData.append('input_data', inputData);
-  formData.append('readme_content', readmeContent);
-  formData.append('branch', branch);
-  
-  return apiRequestFormData('/commit-readme', formData);
-}
-
-/**
- * Get user profile from backend
  * @returns {Promise<any>} User profile data
  */
 export async function getUserProfile() {

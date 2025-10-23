@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRepos } from '../store/repoStore.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import Header from '../components/Header.jsx';
 import Footer from '../components/Footer.jsx';
 import '../App.css';
@@ -11,6 +12,7 @@ export default function RepositoriesPage() {
   const [query, setQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const { repos, loading, error, connectRepo, retryGeneration, deleteRepo, refreshRepos } = useRepos();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const filtered = useMemo(() => {
@@ -18,12 +20,30 @@ export default function RepositoriesPage() {
     return repos.filter(r => (r.name + ' ' + r.owner).toLowerCase().includes(q));
   }, [query, repos]);
 
+  // Auto-refresh when page becomes visible (user switches back to tab)
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (!document.hidden && user) {
+        await refreshRepos();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [refreshRepos, user]);
+
   const handleAddRepo = useCallback(async (formData) => {
-    await connectRepo(formData.githubUrl, {
+    const result = await connectRepo(formData.githubUrl, {
       description: formData.description,
-      language: formData.language,
-      stars: formData.stars
+      branch: formData.branch
     });
+    
+    // Show error if connection failed
+    if (result && result.error) {
+      alert(`Failed to connect repository:\n\n${result.error}`);
+    }
+    
+    return result;
   }, [connectRepo]);
 
   useEffect(() => {
@@ -75,9 +95,6 @@ export default function RepositoriesPage() {
               <p className="repos-sub">Manage and monitor your connected GitHub repositories (synced from DynamoDB)</p>
             </div>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button className="btn-secondary" onClick={refreshRepos} title="Refresh from cloud">
-                🔄 Refresh
-              </button>
               <button className="btn-primary shadow-float" onClick={() => setShowModal(true)}>+ Connect Repository</button>
             </div>
           </div>
@@ -109,7 +126,7 @@ export default function RepositoriesPage() {
               </button>
             </div>
           )}
-          
+
           {hasNoRepos ? (
             <div style={{
               textAlign: 'center',
@@ -156,7 +173,13 @@ export default function RepositoriesPage() {
             </>
           )}
         </div>
-        {showModal && <ConnectRepositoryModal onClose={() => setShowModal(false)} onSubmit={(d)=>{handleAddRepo(d); setShowModal(false);}} />}
+        {showModal && <ConnectRepositoryModal onClose={() => setShowModal(false)} onSubmit={async (d)=> {
+          const result = await handleAddRepo(d);
+          // Only close modal if successful (no error)
+          if (!result || !result.error) {
+            setShowModal(false);
+          }
+        }} />}
       </main>
       <Footer />
     </>
@@ -243,8 +266,9 @@ function RepoCard({ repo, onViewDocs, onRetry, onDelete }) {
 function ConnectRepositoryModal({ onClose, onSubmit }) {
   const [githubUrl, setGithubUrl] = useState('');
   const [description, setDescription] = useState('');
-  const [commitToGithub, setCommitToGithub] = useState(false);
+  const [branch, setBranch] = useState('main');
   const [touched, setTouched] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function parseUrl(url) {
     // Expect formats like https://github.com/owner/repo
@@ -260,11 +284,17 @@ function ConnectRepositoryModal({ onClose, onSubmit }) {
   const parsed = parseUrl(githubUrl);
   const urlInvalid = touched && !parsed;
 
-  function handleSubmit(e){
+  async function handleSubmit(e){
     e.preventDefault();
     setTouched(true);
     if(!parsed) return;
-    onSubmit({ githubUrl, description, commitToGithub });
+    
+    setIsSubmitting(true);
+    try {
+      await onSubmit({ githubUrl, description, branch });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -300,44 +330,27 @@ function ConnectRepositoryModal({ onClose, onSubmit }) {
               rows={4}
             />
           </label>
-          <div style={{
-            padding: '1rem',
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            border: '1px solid rgba(59, 130, 246, 0.3)',
-            borderRadius: '8px',
-            marginTop: '1rem'
-          }}>
-            <label style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              cursor: 'pointer',
-              gap: '0.75rem'
-            }}>
-              <input 
-                type="checkbox" 
-                checked={commitToGithub} 
-                onChange={e=>setCommitToGithub(e.target.checked)}
-                style={{
-                  marginTop: '0.25rem',
-                  width: '18px',
-                  height: '18px',
-                  cursor: 'pointer',
-                  flexShrink: 0
-                }}
+          <label className="field-group">
+            <span className="field-label">Branch</span>
+            <div className="input-wrapper">
+              <input
+                type="text"
+                placeholder="main"
+                value={branch}
+                onChange={e=>setBranch(e.target.value)}
               />
-              <div>
-                <div style={{fontWeight: '500', marginBottom: '0.25rem'}}>
-                  Commit generated README.md to GitHub
-                </div>
-                <div style={{fontSize: '0.875rem', opacity: 0.7, lineHeight: '1.4'}}>
-                  If enabled, the generated README will be automatically committed and pushed to your repository. Requires Git credentials to be configured.
-                </div>
-              </div>
-            </label>
-          </div>
+            </div>
+            <span style={{fontSize: '0.875rem', opacity: 0.7, marginTop: '0.25rem', display: 'block'}}>
+              Specify which branch to generate documentation from (e.g., main, master, develop)
+            </span>
+          </label>
           <div className="modal-actions">
-            <button type="button" className="btn-secondary modal-cancel" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={!parsed}>Connect Repository</button>
+            <button type="button" className="btn-secondary modal-cancel" onClick={onClose} disabled={isSubmitting}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary" disabled={!parsed || isSubmitting}>
+              {isSubmitting ? 'Connecting...' : 'Connect Repository'}
+            </button>
           </div>
         </form>
       </div>

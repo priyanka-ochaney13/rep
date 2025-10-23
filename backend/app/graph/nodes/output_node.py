@@ -1,4 +1,3 @@
-import shutil
 import logging
 from app.models.state import DocGenState
 
@@ -7,22 +6,23 @@ logger = logging.getLogger(__name__)
 
 def output_node(state: DocGenState) -> dict:
     """
-    Final output node that prepares the result and cleans up temporary resources.
+    Final output node that prepares the result.
+    NOTE: No cleanup needed - we never create temp files in zero-storage mode!
     """
-    # Cleanup temporary directory if it was created
-    if state.temp_dir_cleanup:
-        try:
-            logger.info(f"[CLEANUP] Removing temporary directory: {state.temp_dir_cleanup}")
-            shutil.rmtree(state.temp_dir_cleanup, ignore_errors=True)
-            logger.info("[CLEANUP] ✓ Temporary directory cleaned up")
-        except Exception as e:
-            logger.warning(f"[CLEANUP] Failed to cleanup temporary directory: {e}")
+    
+    # Store only the source URL - no local paths ever
+    folder_tree_data = {}
+    if state.input_type in ("github", "repo", "url") and state.input_data:
+        folder_tree_data = {"source_url": state.input_data}
+    elif state.input_type == "zip":
+        folder_tree_data = {"source": "zip_upload"}
+    # For 'upload' type, don't store any path info
     
     return {
         "modified_files": state.modified_files or {},
         "summaries": state.summaries or {},
         "readme": state.readme or "",
         "visuals": state.visuals or {},
-        "folder_tree": state.working_dir or {},
+        "folder_tree": folder_tree_data,
         "input_type": state.input_type,
     }

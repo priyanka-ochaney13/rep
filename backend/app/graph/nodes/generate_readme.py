@@ -51,7 +51,8 @@ def generate_readme(state: DocGenState) -> DocGenState:
     if not state.preferences.generate_readme:
         return state
 
-    folder_structure = "\n".join(sorted(state.working_dir.keys())) if state.working_dir else "Not Available"
+    # Get file list from parsed_data (no working_dir needed anymore)
+    repo_data = state.parsed_data.get("repo_path", {}) if state.parsed_data else {}
     summaries_section = []
 
     if state.readme_summaries and isinstance(state.readme_summaries, list):
@@ -91,9 +92,6 @@ Generate only a **Code Summary** section in markdown based on these summaries. D
 You are a senior technical writer at a FAANG company. Generate a professional, enterprise-grade README.md following industry best practices.
 
 CODEBASE INFORMATION:
-Folder Structure:
-{folder_structure}
-
 Code Summaries:
 {merged_code_summary}
 
@@ -140,11 +138,6 @@ Explain any configuration files, environment variables, or setup required.
 Document endpoints, methods, request/response formats.
 
 ## Development
-
-### Project Structure
-```
-[Show annotated directory tree]
-```
 
 ### Core Components
 Explain the main modules, classes, or functions and their purposes.

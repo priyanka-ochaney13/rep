@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useState } from 'react';
 import { getUserHistory, generateDocs, deleteDocumentation } from '../api/apiClient.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 // --- Types / Constants --------------------------------------------------
 // Status flow: Pending -> Processing -> Ready | Failed
@@ -50,9 +51,7 @@ function transformDynamoDBRecordToRepo(record) {
       visuals: metadata.visuals || {},
       folderTree: metadata.folder_tree || '',
       projectAnalysis: metadata.project_analysis || {}
-    },
-    commitStatus: metadata.commit_status,
-    commitMessage: metadata.commit_message
+    }
   };
 }
 
@@ -94,6 +93,7 @@ function repoReducer(state, action) {
 const RepoContext = createContext(null);
 
 export function RepoProvider({ children }) {
+  const { user, hasCheckedAuth } = useAuth();
   const [state, dispatch] = useReducer(repoReducer, { 
     repos: [], 
     loading: true, 
@@ -101,35 +101,49 @@ export function RepoProvider({ children }) {
   });
 
   const fetchReposFromDynamoDB = useCallback(async () => {
+    // Only fetch if user is authenticated
+    if (!user) {
+      dispatch({ type: ACTIONS.LOAD, payload: [] });
+      return { success: false, reason: 'not_authenticated' };
+    }
+
     try {
       dispatch({ type: ACTIONS.SET_LOADING, payload: true });
       dispatch({ type: ACTIONS.SET_ERROR, payload: null });
       
-      console.log('🔄 Fetching repositories from DynamoDB...');
-      
       // Fetch all documentation records from DynamoDB
       const history = await getUserHistory(100); // Get up to 100 records
-      
-      console.log(`✅ Fetched ${history.length} records from DynamoDB`);
       
       // Transform DynamoDB records to repo format
       const repos = history.map(record => transformDynamoDBRecordToRepo(record));
       
       dispatch({ type: ACTIONS.LOAD, payload: repos });
       
-      console.log(`✅ Loaded ${repos.length} repositories`);
+      return { success: true, count: repos.length };
       
     } catch (error) {
       console.error('❌ Failed to fetch repositories from DynamoDB:', error);
       dispatch({ type: ACTIONS.SET_ERROR, payload: 'Failed to load repositories. Please try again.' });
       dispatch({ type: ACTIONS.LOAD, payload: [] }); // Load empty array on error
+      return { success: false, error: error.message };
     }
-  }, []);
+  }, [user]);
 
-  // Fetch repos from DynamoDB on mount
+  // Fetch repos when user authentication changes
   useEffect(() => {
-    fetchReposFromDynamoDB();
-  }, [fetchReposFromDynamoDB]);
+    // Wait for auth check to complete
+    if (!hasCheckedAuth) {
+      return;
+    }
+    
+    // If user is authenticated, fetch repos
+    if (user) {
+      fetchReposFromDynamoDB();
+    } else {
+      // User is not authenticated, clear repos
+      dispatch({ type: ACTIONS.LOAD, payload: [] });
+    }
+  }, [user, hasCheckedAuth, fetchReposFromDynamoDB]);
 
   // --- Actions ---------------------------------------------------------
 
@@ -139,12 +153,8 @@ export function RepoProvider({ children }) {
 
   const deleteRepo = useCallback(async (id) => {
     try {
-      console.log('🗑️ Deleting repo from DynamoDB:', id);
-      
       // Delete from DynamoDB
       const result = await deleteDocumentation(id);
-      
-      console.log('✅ DynamoDB delete result:', result);
       
       // Check if delete was successful
       if (result.status === 'error') {
@@ -153,11 +163,6 @@ export function RepoProvider({ children }) {
       
       // Remove from local state immediately
       dispatch({ type: ACTIONS.DELETE, id });
-      
-      console.log('✅ Removed from local state');
-      
-      // Don't refetch immediately - let the user manually refresh if needed
-      // This avoids race conditions with DynamoDB eventual consistency
       
     } catch (error) {
       console.error('❌ Failed to delete from DynamoDB:', error);
@@ -202,15 +207,11 @@ export function RepoProvider({ children }) {
     
     try {
       // Call backend to generate docs - it will save to DynamoDB
-      console.log('🚀 Generating documentation...');
       await generateDocs({
         inputType: 'url',
         inputData: githubUrl,
-        branch: 'main',
-        commitToGithub: manual.commitToGithub || false
+        branch: manual.branch || 'main'
       });
-      
-      console.log('✅ Documentation generated successfully');
       
       // Refresh from DynamoDB to get the new record with real ID
       await fetchReposFromDynamoDB();
@@ -222,7 +223,22 @@ export function RepoProvider({ children }) {
       // Update status to Failed
       updateRepo(tempId, { status: 'Failed' });
       
-      return { error: error.message || 'Failed to generate documentation' };
+      // Provide more detailed error messages
+      let errorMessage = 'Failed to generate documentation';
+      
+      if (error.message) {
+        if (error.message.includes('Branch') && error.message.includes('not found')) {
+          errorMessage = `Branch "${manual.branch || 'main'}" not found. Please check the branch name and try again.`;
+        } else if (error.message.includes('rate limit')) {
+          errorMessage = 'GitHub API rate limit exceeded. Please try again later or contact support to add a token.';
+        } else if (error.message.includes('not found') || error.message.includes('404')) {
+          errorMessage = 'Repository not found. Please check the URL and ensure the repository is public.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      return { error: errorMessage };
     }
   }, [fetchReposFromDynamoDB, updateRepo]);
 
@@ -236,7 +252,7 @@ export function RepoProvider({ children }) {
     
     // Retry generation
     const githubUrl = `https://github.com/${repo.owner}/${repo.name}`;
-    await connectRepo(githubUrl, { commitToGithub: false });
+    await connectRepo(githubUrl, {});
   }, [state.repos, updateRepo, connectRepo]);
 
   const value = {

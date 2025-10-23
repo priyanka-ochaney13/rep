@@ -24,7 +24,8 @@ def safe_llm_call(prompt: str, max_retries: int = 5, base_wait: float = 2.0) -> 
     raise RuntimeError("LLM call failed after maximum retries.")
 
 def visualize_code_node(state: DocGenState) -> DocGenState:
-    if not state.working_dir:
+    # Check if we have parsed data (no need for working_dir anymore)
+    if not state.parsed_data:
         return state
 
     repo_data = state.parsed_data.get("repo_path", {})
@@ -142,8 +143,9 @@ def visualize_code_node(state: DocGenState) -> DocGenState:
     except Exception as e:
         print(f"❌ Error in Phase 3: {e}")
         # Fallback to simple diagram
+        repo_name = state.input_data.split('/')[-1] if state.input_data else "Repository"
         mermaid_code = f"""flowchart TD
-    Root["📦 {state.working_dir.split('/')[-1]}"]
+    Root["📦 {repo_name}"]
     Root --> Files["📄 Project Files"]
     Files --> Note["See file tree for details"]
     

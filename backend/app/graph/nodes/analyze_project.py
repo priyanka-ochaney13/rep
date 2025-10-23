@@ -31,11 +31,8 @@ def analyze_project_structure(state: DocGenState) -> DocGenState:
     if not repo_data:
         return state
     
-    # Generate project structure tree
-    file_paths = sorted(repo_data.keys())
-    structure_tree = build_structure_tree(file_paths)
-    
     # Generate detailed analysis for each file
+    file_paths = sorted(repo_data.keys())
     detailed_analysis = {}
     
     for file_path, file_info in repo_data.items():
@@ -82,28 +79,39 @@ Write 2-3 sentences in ACTIVE VOICE explaining:
 3. What problems it SOLVES
 
 **KEY FUNCTIONS & COMPONENTS:**
-For each major function, class, or component, document in this format:
-- `function_name(param1, param2)` - INTERFACE: Accepts [parameters]. Returns [return value]. CONTRACT: [What it guarantees to do]. IMPLEMENTATION: [How it achieves this internally].
+⚠️ ONLY include functions/classes that you can MEANINGFULLY explain with specific details about their purpose, parameters, and implementation.
+⚠️ DO NOT list functions just because they exist - skip them if you cannot provide substantial technical insight.
+⚠️ Quality over quantity - 2-3 well-documented functions are better than 10 vague descriptions.
 
-Example:
-- `authenticate_user(email, password)` - INTERFACE: Accepts user credentials as strings. Returns JWT token string or raises AuthError. CONTRACT: Validates credentials against database and generates secure session token. IMPLEMENTATION: Uses bcrypt for password hashing, queries PostgreSQL user table, and generates JWT with 1-hour expiry.
+For each major function/class that you CAN explain well, document in this format:
+- `function_name(param1, param2)` - Accepts [specific parameter types and purpose]. Returns [specific return type and meaning]. Implements [specific algorithm/pattern/approach] to achieve [concrete goal]. Example: Handles [specific scenario or use case].
+
+ONLY document functions where you can answer ALL of these:
+1. What specific inputs does it take and what do they represent?
+2. What specific output does it produce?
+3. What concrete problem does it solve or what specific action does it perform?
+4. How does it achieve this (algorithm, pattern, technique)?
+
+If you cannot answer all 4 questions with specifics, DO NOT include that function.
 
 **TECHNICAL DETAILS:**
-List in bullet points using ACTIVE VOICE:
-- [Design pattern] - Implements [pattern name] to [achieve specific goal]
-- [Architecture] - Uses [technology/approach] to [solve specific problem]
-- [Integration] - Connects with [external service/component] via [method]
-- [API/Endpoints] - Exposes [HTTP method + path] that [specific action]
-- [Data structures] - Defines [structure name] to [represent/manage specific data]
+List in bullet points using ACTIVE VOICE - focus on architecture, patterns, and design decisions:
+- [Design pattern] - Implements [specific pattern name] to [achieve concrete goal]
+- [Architecture] - Uses [specific technology/approach] to [solve specific problem]
+- [Integration] - Connects with [specific external service/component] via [specific method/protocol]
+- [API/Endpoints] - Exposes [specific HTTP method + path] that [performs specific action]
+- [Data structures] - Defines [specific structure name] to [represent/manage specific data type]
 
 CRITICAL RULES:
 ✓ Use ACTIVE VOICE ("validates input" not "input is validated")
 ✓ Be CONCISE but COMPLETE - every sentence must add value
-✓ Document the INTERFACE (how to use), CONTRACT (what it does), and IMPLEMENTATION (how it works)
+✓ SKIP functions you cannot explain with technical depth
 ✓ Focus on WHY and HOW, not just WHAT
 ✓ Write for developers who need to USE and UNDERSTAND this code
 ✓ Use present tense ("validates", "returns", "implements")
 ✓ Include specific details (parameter types, return values, error conditions)
+✓ It's OK to have NO functions listed if none meet the quality bar
+✓ Better to have empty sections than vague, useless descriptions
 
 Code to analyze:
 ```{language}
@@ -132,9 +140,8 @@ Detected functions/classes: {', '.join(symbols[:10]) if symbols else 'None'}
                 "key_details": []
             }
     
-    # Store in state
+    # Store in state (no structure_tree - user doesn't want it)
     state.project_analysis = {
-        "structure_tree": structure_tree,
         "detailed_analysis": detailed_analysis,
         "file_count": len(detailed_analysis),  # Count only analyzed files
         "total_files": len(file_paths),  # Total files in repo
@@ -144,120 +151,6 @@ Detected functions/classes: {', '.join(symbols[:10]) if symbols else 'None'}
     print(f"[ANALYSIS] Analyzed {len(detailed_analysis)} files out of {len(file_paths)} total files")
     
     return state
-
-
-def build_structure_tree(file_paths: list) -> str:
-    """
-    Build a hierarchical visual tree structure from file paths.
-    Only includes important source code files with logic (excludes HTML, CSS, JSON, configs).
-    """
-    # Filter out non-code files - only keep source code with logic
-    excluded_extensions = (
-        '.css', '.scss', '.sass', '.less',  # Styles
-        '.html', '.htm',                      # Markup
-        '.json', '.yaml', '.yml',             # Config data
-        '.lock', '.md', '.txt',               # Docs/locks
-        '.min.js', '.bundle.js'               # Minified
-    )
-    
-    excluded_names = (
-        'package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
-        'tsconfig.json', 'webpack.config', 'vite.config', 'babel.config',
-        'eslint.config', '.gitignore', '.env'
-    )
-    
-    def should_include(path):
-        filename = path.split('/')[-1].lower()
-        # Check extension
-        if any(path.lower().endswith(ext) for ext in excluded_extensions):
-            return False
-        # Check filename patterns
-        if any(pattern in filename for pattern in excluded_names):
-            return False
-        return True
-    
-    code_files = [path for path in file_paths if should_include(path)]
-    
-    if not code_files:
-        return "📦 Repository Root/\n└── (No code files to display)"
-    
-    # Build nested directory structure
-    tree_dict = {}
-    
-    for path in code_files:
-        parts = path.split('/')
-        current = tree_dict
-        
-        for i, part in enumerate(parts):
-            if i == len(parts) - 1:  # It's a file
-                if '_files' not in current:
-                    current['_files'] = []
-                current['_files'].append(part)
-            else:  # It's a directory
-                if part not in current:
-                    current[part] = {}
-                current = current[part]
-    
-    # Convert nested dict to visual tree string
-    def dict_to_tree(d, prefix="", is_last=True):
-        lines = []
-        
-        # Separate directories and files
-        directories = [(k, v) for k, v in d.items() if k != '_files']
-        files = d.get('_files', [])
-        
-        # Sort directories and files alphabetically
-        directories.sort(key=lambda x: x[0])
-        files.sort()
-        
-        # Process directories first
-        for i, (dir_name, subdict) in enumerate(directories):
-            is_last_dir = (i == len(directories) - 1) and not files
-            connector = "└── " if is_last_dir else "├── "
-            lines.append(f"{prefix}{connector}📁 {dir_name}/")
-            
-            # Add extension for nested items
-            extension = "    " if is_last_dir else "│   "
-            lines.extend(dict_to_tree(subdict, prefix + extension, is_last_dir))
-        
-        # Process files
-        for i, filename in enumerate(files):
-            is_last_file = i == len(files) - 1
-            connector = "└── " if is_last_file else "├── "
-            icon = get_file_icon(filename)
-            lines.append(f"{prefix}{connector}{icon} {filename}")
-        
-        return lines
-    
-    # Build the tree
-    tree_lines = ["📦 Repository Root/"]
-    tree_lines.extend(dict_to_tree(tree_dict, ""))
-    
-    return "\n".join(tree_lines)
-
-
-def get_file_icon(filename: str) -> str:
-    """Get appropriate icon for file type"""
-    if filename.endswith('.py'):
-        return '🐍'
-    elif filename.endswith(('.js', '.jsx')):
-        return '📜'
-    elif filename.endswith(('.ts', '.tsx')):
-        return '📘'
-    elif filename.endswith('.java'):
-        return '☕'
-    elif filename.endswith('.go'):
-        return '🔵'
-    elif filename.endswith(('.json', '.yaml', '.yml')):
-        return '⚙️'
-    elif filename.endswith(('.md', '.txt')):
-        return '📄'
-    elif filename.endswith(('.css', '.scss')):
-        return '🎨'
-    elif filename.endswith('.html'):
-        return '🌐'
-    else:
-        return '📄'
 
 
 def parse_analysis_response(response: str, symbols: list) -> dict:
@@ -320,9 +213,8 @@ def parse_analysis_response(response: str, symbols: list) -> dict:
                     if line:
                         result["key_details"].append(line)
     
-    # Fallback: if parsing failed, use symbols
-    if not result["functions"] and symbols:
-        result["functions"] = [f"`{sym}()` - Function or class in this file" for sym in symbols[:5]]
+    # NO fallback for functions - if LLM couldn't explain them meaningfully, don't list them
+    # This ensures we only show functions with proper explanations
     
     # Fallback: if no purpose, use generic
     if not result["purpose"]:

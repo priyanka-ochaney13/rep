@@ -1,5 +1,6 @@
 import base64
 import logging
+import requests
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -542,28 +543,69 @@ async def generate_docs(
     input_data: str = Form(None),
     zip_file: UploadFile = File(None),
     branch: str = Form(None),
-    commit_to_github: bool = Form(False),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     print("/generate")
-    if input_type == "zip" and zip_file:
-        content = await zip_file.read()
-        base64_zip = base64.b64encode(content).decode("utf-8")
-        state = DocGenState(input_type="zip", input_data=base64_zip, branch=branch, preferences=DocGenPreferences(
-            generate_readme=True,
-            generate_summary=True,
-            visualize_structure=True,
-            commit_to_github=commit_to_github
-        ))
-    else:
-        state = DocGenState(input_type=input_type, input_data=input_data, branch=branch, preferences=DocGenPreferences(
-            generate_readme=True,
-            generate_summary=True,
-            visualize_structure=True,
-            commit_to_github=commit_to_github
-        ))
+    
+    # Validate branch name if provided
+    if branch:
+        branch = branch.strip()
+        if not branch:
+            branch = None  # Use default
+    
+    try:
+        if input_type == "zip" and zip_file:
+            content = await zip_file.read()
+            base64_zip = base64.b64encode(content).decode("utf-8")
+            state = DocGenState(input_type="zip", input_data=base64_zip, branch=branch, preferences=DocGenPreferences(
+                generate_readme=True,
+                generate_summary=True,
+                visualize_structure=True
+            ))
+        else:
+            state = DocGenState(input_type=input_type, input_data=input_data, branch=branch, preferences=DocGenPreferences(
+                generate_readme=True,
+                generate_summary=True,
+                visualize_structure=True
+            ))
 
-    result = run_pipeline(state)
+        result = run_pipeline(state)
+    except ValueError as ve:
+        # Handle branch not found and other validation errors
+        error_message = str(ve)
+        logger.error(f"Validation error: {error_message}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_message
+        )
+    except requests.HTTPError as he:
+        # Handle GitHub API errors
+        error_message = str(he)
+        logger.error(f"GitHub API error: {error_message}")
+        
+        if "rate limit" in error_message.lower():
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="GitHub API rate limit exceeded. Please add a GITHUB_TOKEN environment variable or try again later."
+            )
+        elif "404" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Repository or branch not found. Please check the URL and branch name."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"GitHub API error: {error_message}"
+            )
+    except Exception as e:
+        # Handle any other unexpected errors
+        error_message = str(e)
+        logger.error(f"Unexpected error during documentation generation: {error_message}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate documentation: {error_message}"
+        )
     
     # Debug logging
     logger.info("=" * 60)
@@ -582,8 +624,6 @@ async def generate_docs(
             "visuals": result.get("visuals"),
             "folder_tree": result.get("folder_tree"),
             "input_type": result.get("input_type"),
-            "commit_status": result.get("commit_status"),
-            "commit_message": result.get("commit_message"),
             "project_analysis": result.get("project_analysis")
         }
         
@@ -607,69 +647,8 @@ async def generate_docs(
         "visuals": result.get("visuals"),
         "folder_tree": result.get("folder_tree"),
         "input_type": result.get("input_type"),
-        "commit_status": result.get("commit_status"),
-        "commit_message": result.get("commit_message"),
         "project_analysis": result.get("project_analysis"),
     }
-
-@app.post("/commit-readme")
-async def commit_readme_only(
-    input_data: str = Form(...),
-    readme_content: str = Form(...),
-    branch: str = Form("main"),
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """
-    Commit only the README without regenerating documentation.
-    Useful for committing after reviewing the generated README.
-    """
-    from app.graph.nodes.fetch_code import fetch_code
-    from app.graph.nodes.commit_readme import commit_and_push_readme
-    
-    logger.info("=" * 60)
-    logger.info("📝 Commit README Only Request")
-    logger.info(f"Repository: {input_data}")
-    logger.info("=" * 60)
-    
-    try:
-        # Create state and fetch the repository
-        state = DocGenState(
-            input_type="url",
-            input_data=input_data,
-            branch=branch,
-            readme=readme_content,
-            preferences=DocGenPreferences(
-                generate_readme=False,
-                generate_summary=False,
-                visualize_structure=False,
-                commit_to_github=True
-            )
-        )
-        
-        # Fetch/clone the repository
-        logger.info("📥 Cloning repository...")
-        state = fetch_code(state)
-        
-        # Commit the README
-        logger.info("🚀 Committing README...")
-        state = commit_and_push_readme(state)
-        
-        logger.info("=" * 60)
-        logger.info(f"Commit Status: {state.commit_status}")
-        logger.info(f"Commit Message: {state.commit_message}")
-        logger.info("=" * 60)
-        
-        return {
-            "commit_status": state.commit_status,
-            "commit_message": state.commit_message,
-        }
-        
-    except Exception as e:
-        logger.error(f"Error committing README: {str(e)}")
-        return {
-            "commit_status": "error",
-            "commit_message": f"Failed to commit: {str(e)}"
-        }
 
 @app.post("/download-zip")
 async def download_modified_zip(modified_files_json: str = Form(...)):

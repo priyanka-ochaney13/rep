@@ -83,6 +83,7 @@ def fetch_repo_tree(owner: str, repo: str, branch: str = "main", token: Optional
     
     Raises:
         requests.HTTPError: If API request fails
+        ValueError: If branch not found
     """
     # First, get the SHA of the branch
     headers = {'Accept': 'application/vnd.github.v3+json'}
@@ -90,22 +91,41 @@ def fetch_repo_tree(owner: str, repo: str, branch: str = "main", token: Optional
         headers['Authorization'] = f'token {token}'
     
     # Get branch info to get the commit SHA
+    original_branch = branch
     branch_url = f'https://api.github.com/repos/{owner}/{repo}/branches/{branch}'
     
     logger.info(f"Fetching branch info from: {branch_url}")
     response = requests.get(branch_url, headers=headers, timeout=30)
     
     if response.status_code == 404:
-        # Try alternative branches
-        for alt_branch in ['main', 'master']:
-            if alt_branch == branch:
-                continue
-            logger.info(f"Branch '{branch}' not found, trying '{alt_branch}'...")
-            branch_url = f'https://api.github.com/repos/{owner}/{repo}/branches/{alt_branch}'
-            response = requests.get(branch_url, headers=headers, timeout=30)
-            if response.ok:
-                branch = alt_branch
-                break
+        # Try alternative branches only if user didn't specify a custom branch
+        # or if the specified branch is 'main' or 'master'
+        should_try_alternatives = branch in ['main', 'master']
+        
+        if should_try_alternatives:
+            for alt_branch in ['main', 'master', 'develop']:
+                if alt_branch == branch:
+                    continue
+                logger.info(f"Branch '{branch}' not found, trying '{alt_branch}'...")
+                branch_url = f'https://api.github.com/repos/{owner}/{repo}/branches/{alt_branch}'
+                response = requests.get(branch_url, headers=headers, timeout=30)
+                if response.ok:
+                    branch = alt_branch
+                    logger.info(f"✓ Using branch '{alt_branch}' instead")
+                    break
+        
+        # If still 404, raise a clear error
+        if response.status_code == 404:
+            available_branches_msg = f"Branch '{original_branch}' not found in {owner}/{repo}. "
+            available_branches_msg += "Please check the branch name and try again."
+            logger.error(available_branches_msg)
+            raise ValueError(available_branches_msg)
+    
+    # Check for other HTTP errors
+    if response.status_code == 403:
+        error_msg = "GitHub API rate limit exceeded. Please add a GITHUB_TOKEN environment variable or try again later."
+        logger.error(error_msg)
+        raise requests.HTTPError(error_msg)
     
     response.raise_for_status()
     branch_data = response.json()
