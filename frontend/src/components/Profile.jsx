@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getUserProfile } from '../api/apiClient'
 import Header from './Header'
@@ -6,7 +7,8 @@ import Footer from './Footer'
 import '../App.css'
 
 export default function Profile() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [backendProfile, setBackendProfile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -52,8 +54,8 @@ export default function Profile() {
         <div className="repos-container" style={{ maxWidth: '960px' }}>
           {/* Page Header */}
           <div style={{ marginBottom: '2.5rem' }}>
-            <h1 className="repos-title">Account Settings</h1>
-            <p className="repos-sub">Manage your profile and account preferences</p>
+            <h1 className="repos-title">Profile</h1>
+            <p className="repos-sub">Your account information</p>
           </div>
 
           {/* Profile Card */}
@@ -66,6 +68,15 @@ export default function Profile() {
                 <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.5rem' }}>{user.displayName || user.email?.split('@')[0]}</h2>
                 <p style={{ margin: 0, color: '#9da9b8', fontSize: '0.9rem' }}>{user.email}</p>
               </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button 
+                onClick={() => navigate('/repositories')}
+                className="btn-primary"
+                style={{ fontSize: '0.9rem', padding: '0.65rem 1.1rem' }}
+              >
+                View My Repositories
+              </button>
             </div>
           </div>
 
@@ -101,18 +112,6 @@ export default function Profile() {
 
               {backendProfile && (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '0.75rem', padding: '0.75rem 0', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                    <span style={{ color: '#9da9b8', fontSize: '0.9rem' }}>User ID</span>
-                    <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#b6c1ce' }}>{backendProfile.user_id}</span>
-                  </div>
-
-                  {backendProfile.groups && backendProfile.groups.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '0.75rem', padding: '0.75rem 0', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                      <span style={{ color: '#9da9b8', fontSize: '0.9rem' }}>Groups</span>
-                      <span style={{ fontSize: '0.95rem' }}>{backendProfile.groups.join(', ')}</span>
-                    </div>
-                  )}
-
                   <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '0.75rem', padding: '0.75rem 0' }}>
                     <span style={{ color: '#9da9b8', fontSize: '0.9rem' }}>Session Expires</span>
                     <span style={{ fontSize: '0.95rem' }}>
@@ -148,6 +147,13 @@ export default function Profile() {
                 style={{ fontSize: '0.9rem', padding: '0.65rem 1.1rem' }}
               >
                 Refresh Session
+              </button>
+              <button 
+                onClick={logout}
+                className="btn-secondary"
+                style={{ fontSize: '0.9rem', padding: '0.65rem 1.1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444' }}
+              >
+                Sign Out
               </button>
             </div>
           </div>
