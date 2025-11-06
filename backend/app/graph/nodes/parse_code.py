@@ -1,5 +1,5 @@
 import os
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 from tree_sitter import Language, Parser
 
 import tree_sitter_python as tspython
@@ -200,7 +200,7 @@ def walk_folder(base_path: str):
 
     return structure
 
-def parse_code(state: DocGenState):
+def parse_code(state: RepoXState):
     all_parsed = {}
 
     working_dir = state.working_dir

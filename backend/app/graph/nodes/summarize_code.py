@@ -1,4 +1,4 @@
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 from app.utils.mistral import get_llm_response_summary
 import re
 import time
@@ -45,7 +45,7 @@ def safe_llm_call(prompt: str, language: str, max_retries=5, base_wait=2.0):
             time.sleep(wait_time)
     raise RuntimeError("LLM call failed after maximum retries.")
 
-def summarize_code_node(state: DocGenState) -> DocGenState:
+def summarize_code_node(state: RepoXState) -> RepoXState:
     if not state.preferences.generate_summary or not state.parsed_data:
         return state
 

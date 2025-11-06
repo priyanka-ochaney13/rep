@@ -1,7 +1,7 @@
 """
 Project Analysis Node - Generates detailed file-by-file analysis with function highlights
 """
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 from app.utils.mistral import get_llm_response_summary
 import time
 import random
@@ -18,7 +18,7 @@ def safe_llm_call(prompt: str, language: str, max_retries=5, base_wait=2.0):
     raise RuntimeError("LLM call failed after maximum retries.")
 
 
-def analyze_project_structure(state: DocGenState) -> DocGenState:
+def analyze_project_structure(state: RepoXState) -> RepoXState:
     """
     Generate enhanced project analysis with:
     - Project structure tree

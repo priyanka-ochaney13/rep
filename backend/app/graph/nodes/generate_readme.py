@@ -2,7 +2,7 @@ import os
 import re
 import time
 import random
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 from app.utils.mistral import get_llm_response_readme
 
 def clean_llm_markdown_response(raw_response: str) -> str:
@@ -45,7 +45,7 @@ def chunk_summaries(summaries, max_chars=6000):
 
     return chunks
 
-def generate_readme(state: DocGenState) -> DocGenState:
+def generate_readme(state: RepoXState) -> RepoXState:
     print("Inside readme")
 
     if not state.preferences.generate_readme:

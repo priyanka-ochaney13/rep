@@ -4,7 +4,7 @@ This will process a GitHub repo and verify no temp files are created.
 """
 import os
 import tempfile
-from app.models.state import DocGenState, DocGenPreferences
+from app.models.state import RepoXState, RepoXPreferences
 from app.graph.graph import run_pipeline
 
 def count_temp_files_before():
@@ -25,10 +25,10 @@ def test_zero_storage():
     print(f"📊 Temp files before: {before_count}")
     
     # Create state (NOTE: commit_to_github removed entirely!)
-    state = DocGenState(
+    state = RepoXState(
         input_type="url",
         input_data="https://github.com/torvalds/linux",  # Small test repo
-        preferences=DocGenPreferences(
+        preferences=RepoXPreferences(
             generate_summary=True,
             generate_readme=True,
             visualize_structure=True

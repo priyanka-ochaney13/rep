@@ -1,10 +1,10 @@
 import logging
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 
 logger = logging.getLogger(__name__)
 
 
-def output_node(state: DocGenState) -> dict:
+def output_node(state: RepoXState) -> dict:
     """
     Final output node that prepares the result.
     NOTE: No cleanup needed - we never create temp files in zero-storage mode!

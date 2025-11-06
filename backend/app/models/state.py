@@ -1,12 +1,12 @@
 from typing import List, Optional, Union, Dict, Any
 from pydantic import BaseModel, Field
 
-class DocGenPreferences(BaseModel):
+class RepoXPreferences(BaseModel):
     generate_summary: bool
     generate_readme: bool
     visualize_structure: bool
 
-class DocGenState(BaseModel):
+class RepoXState(BaseModel):
     input_type: str
     input_data: Union[str, Dict]
     current_file_path: Optional[str] = None
@@ -17,7 +17,7 @@ class DocGenState(BaseModel):
     readme: Optional[str] = None
     visuals: Optional[Dict[str, str]] = None
     readme_summaries: Optional[List[Dict[str, Any]]] = None
-    preferences: Optional[DocGenPreferences]
+    preferences: Optional[RepoXPreferences]
     branch: Optional[str] = None
     project_analysis: Optional[Dict[str, Any]] = None  # Project structure and detailed analysis
     files_content: Optional[Dict[str, str]] = None  # In-memory file content: {path: content}

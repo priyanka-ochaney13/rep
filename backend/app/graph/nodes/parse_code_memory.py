@@ -3,7 +3,7 @@ In-memory version of parse_code that works directly with file content dictionary
 No temporary file storage needed!
 """
 import os
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 from tree_sitter import Language, Parser
 
 import tree_sitter_python as tspython
@@ -211,7 +211,7 @@ def parse_code_from_memory(files_content: dict) -> dict:
     return structure
 
 
-def parse_code_memory(state: DocGenState):
+def parse_code_memory(state: RepoXState):
     """
     Parse code from in-memory files (no temp storage needed).
     

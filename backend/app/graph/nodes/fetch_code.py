@@ -1,7 +1,7 @@
 import logging
 import zipfile
 import io
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 from app.utils.github_api import download_repo_to_memory
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ def extract_zip_to_memory(zip_data: bytes) -> dict:
     return files_content
 
 
-def fetch_code(state: DocGenState) -> DocGenState:
+def fetch_code(state: RepoXState) -> RepoXState:
     """
     Fetch code from GitHub or ZIP - ZERO local storage mode!
     Everything stays in memory - no temp files, no git clones, nothing on disk!

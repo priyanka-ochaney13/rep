@@ -1,4 +1,4 @@
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 from app.utils.mistral import get_llm_response_readme
 from app.prompts.diagram_prompts import (
     SYSTEM_EXPLANATION_PROMPT,
@@ -23,7 +23,7 @@ def safe_llm_call(prompt: str, max_retries: int = 5, base_wait: float = 2.0) -> 
                 raise
     raise RuntimeError("LLM call failed after maximum retries.")
 
-def visualize_code_node(state: DocGenState) -> DocGenState:
+def visualize_code_node(state: RepoXState) -> RepoXState:
     # Check if we have parsed data (no need for working_dir anymore)
     if not state.parsed_data:
         return state

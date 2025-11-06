@@ -1,12 +1,12 @@
 import os
 import logging
 from git import Repo, GitCommandError
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 
 logger = logging.getLogger(__name__)
 
 
-def commit_and_push_readme(state: DocGenState) -> DocGenState:
+def commit_and_push_readme(state: RepoXState) -> RepoXState:
     """
     Commits the generated README.md to the cloned repository and pushes it to GitHub.
     Only works if input_type is 'github', 'repo', or 'url' and commit_to_github is enabled.

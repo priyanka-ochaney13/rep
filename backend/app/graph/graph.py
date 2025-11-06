@@ -1,6 +1,6 @@
 from typing import Dict, Any
 import logging
-from app.models.state import DocGenState
+from app.models.state import RepoXState
 from app.graph.nodes.fetch_code import fetch_code
 from app.graph.nodes.parse_code_memory import parse_code_memory
 from app.graph.nodes.summarize_code import summarize_code_node
@@ -12,7 +12,7 @@ from app.graph.nodes.output_node import output_node
 logger = logging.getLogger(__name__)
 
 
-def summarize_only_node(state: DocGenState) -> DocGenState:
+def summarize_only_node(state: RepoXState) -> RepoXState:
     repo_data = (state.parsed_data or {}).get("repo_path", {})
     for file_path in repo_data.keys():
         state.current_file_path = file_path
@@ -20,7 +20,7 @@ def summarize_only_node(state: DocGenState) -> DocGenState:
     return state
 
 
-def run_pipeline(state: DocGenState) -> Dict[str, Any]:
+def run_pipeline(state: RepoXState) -> Dict[str, Any]:
     """Run a simple sequential pipeline and return a dict matching API expectations."""
     logger.info("=" * 60)
     logger.info("🚀 Starting Documentation Generation Pipeline")

@@ -5,7 +5,7 @@ from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, sta
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.graph.graph import run_pipeline
-from app.models.state import DocGenState, DocGenPreferences
+from app.models.state import RepoXState, RepoXPreferences
 from app.utils.cognito_auth import verify_cognito_token, get_user_info_from_token
 from app.utils.dynamodb import (
     save_user_preferences, get_user_preferences,
@@ -613,11 +613,11 @@ async def regenerate_documentation(
     
     try:
         # Run the documentation generation pipeline
-        state = DocGenState(
+        state = RepoXState(
             input_type="url",
             input_data=repo_url,
             branch=branch,
-            preferences=DocGenPreferences(
+            preferences=RepoXPreferences(
                 generate_readme=True,
                 generate_summary=True,
                 visualize_structure=True
@@ -711,13 +711,13 @@ async def generate_docs(
         if input_type == "zip" and zip_file:
             content = await zip_file.read()
             base64_zip = base64.b64encode(content).decode("utf-8")
-            state = DocGenState(input_type="zip", input_data=base64_zip, branch=branch, preferences=DocGenPreferences(
+            state = RepoXState(input_type="zip", input_data=base64_zip, branch=branch, preferences=RepoXPreferences(
                 generate_readme=True,
                 generate_summary=True,
                 visualize_structure=True
             ))
         else:
-            state = DocGenState(input_type=input_type, input_data=input_data, branch=branch, preferences=DocGenPreferences(
+            state = RepoXState(input_type=input_type, input_data=input_data, branch=branch, preferences=RepoXPreferences(
                 generate_readme=True,
                 generate_summary=True,
                 visualize_structure=True
@@ -851,13 +851,13 @@ async def generate_and_download(
     if input_type == "zip" and zip_file:
         content = await zip_file.read()
         base64_zip = base64.b64encode(content).decode("utf-8")
-        state = DocGenState(input_type="zip", input_data=base64_zip, branch=branch, preferences=DocGenPreferences(
+        state = RepoXState(input_type="zip", input_data=base64_zip, branch=branch, preferences=RepoXPreferences(
             generate_readme=True,
             generate_summary=True,
             visualize_structure=True
         ))
     else:
-        state = DocGenState(input_type=input_type, input_data=input_data, branch=branch, preferences=DocGenPreferences(
+        state = RepoXState(input_type=input_type, input_data=input_data, branch=branch, preferences=RepoXPreferences(
             generate_readme=True,
             generate_summary=True,
             visualize_structure=True
@@ -897,5 +897,5 @@ def download_zip(download_id: str):
     return StreamingResponse(
         io.BytesIO(zip_bytes),
         media_type="application/x-zip-compressed",
-        headers={"Content-Disposition": "attachment; filename=docgen_output.zip"}
+        headers={"Content-Disposition": "attachment; filename=repox_output.zip"}
     )
