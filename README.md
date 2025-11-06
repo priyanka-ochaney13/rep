@@ -1,7 +1,7 @@
 
-# RepoX (rep)
+# RepoX
 
-A developer tool that generates project documentation, README files, and visualizations from a repository (URL or ZIP).
+A developer tool that generates project documentation, README files, and visualizations from a repository (URL).
 
 > Backend: FastAPI (Python)  •  Frontend: React + Vite  •  Auth: AWS Cognito  •  Storage: DynamoDB
 
@@ -87,7 +87,7 @@ Notes:
 1. Change to the frontend folder:
 
 ```powershell
-cd C:\Users\priya\OneDrive\Desktop\rep\frontend
+cd frontend
 ```
 
 2. Install dependencies:
@@ -109,13 +109,13 @@ Vite typically serves the frontend on http://localhost:5173. The backend CORS se
 Create a `backend/.env` (do not commit) and add keys similar to:
 
 - AWS_REGION=us-east-1
-- AWS_ACCESS_KEY_ID=...
-- AWS_SECRET_ACCESS_KEY=...
-- COGNITO_USER_POOL_ID=us-east-1_xxx
-- COGNITO_APP_CLIENT_ID=your_app_client_id
-- GITHUB_TOKEN=ghp_...
-- OPENAI_API_KEY=sk-...
-- MISTRAL_API_KEY=...
+- AWS_ACCESS_KEY_ID=
+- AWS_SECRET_ACCESS_KEY=
+- COGNITO_USER_POOL_ID=
+- COGNITO_APP_CLIENT_ID=
+- GITHUB_TOKEN=
+- OPENAI_API_KEY=
+- MISTRAL_API_KEY=
 
 Keep secrets out of source control. Use a secrets manager or CI/CD secret storage for production deployments.
 
